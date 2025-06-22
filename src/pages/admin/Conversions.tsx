@@ -92,7 +92,7 @@ const AdminConversions = () => {
       conversion.id === selectedConversion.id
         ? {
             ...conversion,
-            status: actionType,
+            status: actionType === 'approve' ? 'approved' as const : 'rejected' as const,
             dateProcessed: new Date().toISOString().split('T')[0],
             reason: actionType === 'reject' ? 'Administrative decision' : undefined
           }
