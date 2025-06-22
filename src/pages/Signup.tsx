@@ -1,34 +1,31 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Coins, Eye, EyeOff } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Coins, User, Building2, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Signup = () => {
-  const [searchParams] = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [userType, setUserType] = useState(searchParams.get('type') || 'user');
-  const [organizationName, setOrganizationName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [role, setRole] = useState<'user' | 'org'>('user');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
 
-  useEffect(() => {
-    const type = searchParams.get('type');
-    if (type && ['user', 'org'].includes(type)) {
-      setUserType(type);
-    }
-  }, [searchParams]);
+  // Set initial role from URL params
+  useState(() => {
+    const typeParam = searchParams.get('type');
+    if (typeParam === 'org') setRole('org');
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,16 +33,7 @@ const Signup = () => {
     if (password !== confirmPassword) {
       toast({
         title: "Password Mismatch",
-        description: "Passwords do not match. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (password.length < 6) {
-      toast({
-        title: "Password Too Short",
-        description: "Password must be at least 6 characters long.",
+        description: "Passwords do not match.",
         variant: "destructive",
       });
       return;
@@ -56,26 +44,23 @@ const Signup = () => {
     // Simulate API call
     setTimeout(() => {
       // Store user info in localStorage for demo
-      const userData = {
+      localStorage.setItem('user', JSON.stringify({
+        name,
         email,
-        role: userType,
-        name: userType === 'org' ? organizationName : name,
+        role,
         id: Math.random().toString(36).substr(2, 9),
-        walletBalance: userType === 'user' ? 0 : undefined,
-        coinsEarned: userType === 'org' ? 0 : undefined
-      };
-
-      localStorage.setItem('user', JSON.stringify(userData));
+        walletBalance: role === 'user' ? 0 : undefined
+      }));
 
       toast({
-        title: "Account Created Successfully",
+        title: "Account Created!",
         description: `Welcome to ErthaExchange! Redirecting to your dashboard.`,
       });
 
-      // Redirect based on user type
-      const dashboardPath = userType === 'user' ? '/dashboard/user' : '/dashboard/org';
+      // Redirect based on role
+      const dashboardPath = role === 'user' ? '/dashboard/user' : 
+                           role === 'org' ? '/dashboard/org' : '/dashboard/admin';
       navigate(dashboardPath);
-      
       setIsLoading(false);
     }, 1500);
   };
@@ -93,43 +78,25 @@ const Signup = () => {
 
         <Card className="shadow-xl">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Create Account</CardTitle>
+            <CardTitle className="text-2xl">Create Your Account</CardTitle>
             <CardDescription>
-              Join ErthaExchange and start your journey
+              Join the future of service exchange
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* User Type Selection */}
-              <div className="space-y-3">
-                <Label>I am a</Label>
-                <RadioGroup value={userType} onValueChange={setUserType}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="user" id="user" />
-                    <Label htmlFor="user">User (looking for services)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="org" id="org" />
-                    <Label htmlFor="org">Organization (providing services)</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {/* Name Field */}
               <div className="space-y-2">
-                <Label htmlFor="name">
-                  {userType === 'org' ? 'Organization Name' : 'Full Name'}
-                </Label>
+                <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
                   type="text"
-                  placeholder={userType === 'org' ? 'Enter organization name' : 'Enter your full name'}
-                  value={userType === 'org' ? organizationName : name}
-                  onChange={(e) => userType === 'org' ? setOrganizationName(e.target.value) : setName(e.target.value)}
+                  placeholder="Enter your full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   required
                 />
               </div>
-
+              
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -141,7 +108,7 @@ const Signup = () => {
                   required
                 />
               </div>
-
+              
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -168,31 +135,53 @@ const Signup = () => {
                   </Button>
                 </div>
               </div>
-
+              
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Account Type</Label>
+                <div className="flex gap-2">
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    variant={role === 'user' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setRole('user')}
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
+                    <User className="h-4 w-4 mr-2" />
+                    User
                   </Button>
+                  <Button
+                    type="button"
+                    variant={role === 'org' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setRole('org')}
+                  >
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Organization
+                  </Button>
+                </div>
+                <div className="text-sm text-gray-600 space-y-1">
+                  {role === 'user' ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">User</Badge>
+                      <span>Buy coins and access services</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Organization</Badge>
+                      <span>Offer services and earn coins</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
