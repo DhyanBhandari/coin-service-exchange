@@ -70,9 +70,11 @@ const LivingSpaces = () => {
         </div>
 
         <div className="text-center">
-          <Button size="lg" className="text-lg px-8 py-4">
-            Book Living Space Now
-          </Button>
+          <Link to="/payment?service=Living Spaces&price=100">
+            <Button size="lg" className="text-lg px-8 py-4">
+              Book Living Space Now
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

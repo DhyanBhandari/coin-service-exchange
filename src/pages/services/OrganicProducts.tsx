@@ -70,9 +70,11 @@ const OrganicProducts = () => {
         </div>
 
         <div className="text-center">
-          <Button size="lg" className="text-lg px-8 py-4">
-            Order Organic Products Now
-          </Button>
+          <Link to="/payment?service=Organic Products&price=50">
+            <Button size="lg" className="text-lg px-8 py-4">
+              Order Organic Products Now
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

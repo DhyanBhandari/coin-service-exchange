@@ -70,9 +70,11 @@ const StartupEvents = () => {
         </div>
 
         <div className="text-center">
-          <Button size="lg" className="text-lg px-8 py-4">
-            Join StartUp Circle Now
-          </Button>
+          <Link to="/payment?service=StartUp Circle Events&price=75">
+            <Button size="lg" className="text-lg px-8 py-4">
+              Join StartUp Circle Now
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

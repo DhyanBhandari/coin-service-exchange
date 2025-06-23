@@ -70,9 +70,11 @@ const SustainableTrips = () => {
         </div>
 
         <div className="text-center">
-          <Button size="lg" className="text-lg px-8 py-4">
-            Book Sustainable Trip Now
-          </Button>
+          <Link to="/payment?service=Sustainable Trips&price=250">
+            <Button size="lg" className="text-lg px-8 py-4">
+              Book Sustainable Trip Now
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

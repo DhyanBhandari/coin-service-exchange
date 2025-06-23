@@ -70,9 +70,11 @@ const TechServices = () => {
         </div>
 
         <div className="text-center">
-          <Button size="lg" className="text-lg px-8 py-4">
-            Get Tech Services Now
-          </Button>
+          <Link to="/payment?service=Tech Services&price=150">
+            <Button size="lg" className="text-lg px-8 py-4">
+              Get Tech Services Now
+            </Button>
+          </Link>
         </div>
       </div>
     </div>

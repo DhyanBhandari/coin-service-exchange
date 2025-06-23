@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,6 +24,8 @@ import TechServices from "./pages/services/TechServices";
 import StartupEvents from "./pages/services/StartupEvents";
 import EventPasses from "./pages/services/EventPasses";
 import NotFound from "./pages/NotFound";
+import Payment from "./pages/Payment";
+import Feedback from "./pages/Feedback";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/payment" element={<Payment />} />
+          <Route path="/feedback" element={<Feedback />} />
           
           {/* Service Detail Pages */}
           <Route path="/services/living-spaces" element={<LivingSpaces />} />

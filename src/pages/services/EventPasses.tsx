@@ -70,9 +70,11 @@ const EventPasses = () => {
         </div>
 
         <div className="text-center">
-          <Button size="lg" className="text-lg px-8 py-4">
-            Get Event Pass Now
-          </Button>
+          <Link to="/payment?service=Event Passes&price=120">
+            <Button size="lg" className="text-lg px-8 py-4">
+              Get Event Pass Now
+            </Button>
+          </Link>
         </div>
       </div>
     </div>
