@@ -18,6 +18,12 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminUsers from "./pages/admin/Users";
 import AdminServices from "./pages/admin/Services";
 import AdminConversions from "./pages/admin/Conversions";
+import LivingSpaces from "./pages/services/LivingSpaces";
+import SustainableTrips from "./pages/services/SustainableTrips";
+import OrganicProducts from "./pages/services/OrganicProducts";
+import TechServices from "./pages/services/TechServices";
+import StartupEvents from "./pages/services/StartupEvents";
+import EventPasses from "./pages/services/EventPasses";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +38,14 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          
+          {/* Service Detail Pages */}
+          <Route path="/services/living-spaces" element={<LivingSpaces />} />
+          <Route path="/services/sustainable-trips" element={<SustainableTrips />} />
+          <Route path="/services/organic-products" element={<OrganicProducts />} />
+          <Route path="/services/tech-services" element={<TechServices />} />
+          <Route path="/services/startup-events" element={<StartupEvents />} />
+          <Route path="/services/event-passes" element={<EventPasses />} />
           
           {/* User Routes */}
           <Route path="/dashboard/user" element={<UserDashboard />} />
