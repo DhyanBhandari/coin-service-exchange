@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Shield, Users, Zap, ArrowRight, Star } from "lucide-react";
+import { Coins, Shield, Users, Zap, ArrowRight, Star, Home, Plane, Leaf, Laptop, Users2, Ticket } from "lucide-react";
 
 const Index = () => {
   const [userType, setUserType] = useState<'user' | 'org' | null>(null);
@@ -33,10 +33,54 @@ const Index = () => {
   ];
 
   const services = [
-    { name: "Digital Marketing", price: "50 Coins", category: "Business", rating: 4.8 },
-    { name: "Web Development", price: "200 Coins", category: "Technology", rating: 4.9 },
-    { name: "Consulting", price: "100 Coins", category: "Business", rating: 4.7 },
-    { name: "Design Services", price: "75 Coins", category: "Creative", rating: 4.8 }
+    { 
+      name: "Living Spaces", 
+      price: "100 Coins", 
+      category: "Lifestyle", 
+      rating: 4.9,
+      icon: <Home className="h-6 w-6 text-blue-600" />,
+      description: "Premium co-living and workspace solutions"
+    },
+    { 
+      name: "Sustainable Trips", 
+      price: "250 Coins", 
+      category: "Travel", 
+      rating: 4.8,
+      icon: <Plane className="h-6 w-6 text-green-600" />,
+      description: "Eco-friendly travel experiences and tours"
+    },
+    { 
+      name: "Organic Products", 
+      price: "50 Coins", 
+      category: "Health", 
+      rating: 4.7,
+      icon: <Leaf className="h-6 w-6 text-emerald-600" />,
+      description: "Fresh organic food and wellness products"
+    },
+    { 
+      name: "Tech Services", 
+      price: "150 Coins", 
+      category: "Technology", 
+      rating: 4.9,
+      icon: <Laptop className="h-6 w-6 text-purple-600" />,
+      description: "Web development and digital solutions"
+    },
+    { 
+      name: "StartUp Circle Events", 
+      price: "75 Coins", 
+      category: "Networking", 
+      rating: 4.8,
+      icon: <Users2 className="h-6 w-6 text-orange-600" />,
+      description: "Exclusive startup networking events"
+    },
+    { 
+      name: "Event Passes", 
+      price: "120 Coins", 
+      category: "Entertainment", 
+      rating: 4.6,
+      icon: <Ticket className="h-6 w-6 text-pink-600" />,
+      description: "Access to premium events and experiences"
+    }
   ];
 
   return (
@@ -127,13 +171,13 @@ const Index = () => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Popular Services
+              Our Services
             </h2>
             <p className="text-xl text-gray-600">
-              Discover amazing services from our partner organizations
+              Discover amazing services from sustainable living to tech solutions
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {services.map((service, index) => (
               <Card key={index} className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                 <CardHeader>
@@ -144,7 +188,11 @@ const Index = () => {
                       <span className="text-sm text-gray-600 ml-1">{service.rating}</span>
                     </div>
                   </div>
-                  <CardTitle className="text-lg">{service.name}</CardTitle>
+                  <div className="flex items-center space-x-3 mb-2">
+                    {service.icon}
+                    <CardTitle className="text-lg">{service.name}</CardTitle>
+                  </div>
+                  <CardDescription>{service.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex justify-between items-center">
