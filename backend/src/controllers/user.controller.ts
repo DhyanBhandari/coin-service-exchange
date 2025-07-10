@@ -1,7 +1,8 @@
-import { Response } from 'express';
-import { UserService } from '@/services/user.service';
-import { createApiResponse, AppError, calculatePagination } from '@/utils/helpers';
+import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/types';
+import { UserService } from '@/services/user.service';
+import { createApiResponse, getClientIp, getUserAgent, validatePaginationParams } from '@/utils/helpers';
+import { asyncHandler } from '@/middleware/error.middleware';
 
 export class UserController {
   private userService: UserService;
@@ -10,123 +11,44 @@ export class UserController {
     this.userService = new UserService();
   }
 
-  getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-      const profile = await this.userService.getUserProfile(userId);
+  updateProfile = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const updateData = req.body;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
-      res.status(200).json(
-        createApiResponse(true, 'Profile retrieved successfully', profile)
+    const updatedUser = await this.userService.updateProfile(
+      req.user!.id,
+      updateData,
+      ipAddress,
+      userAgent
+    );
+
+    res.json(
+      createApiResponse(true, 'Profile updated successfully', updatedUser)
+    );
+  });
+
+  getUserById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+
+    const user = await this.userService.getUserById(id);
+    if (!user) {
+      return res.status(404).json(
+        createApiResponse(false, 'User not found')
       );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
     }
-  };
 
-  updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-      const updateData = req.body;
+    res.json(
+      createApiResponse(true, 'User retrieved successfully', user)
+    );
+  });
 
-      const updatedProfile = await this.userService.updateProfile(userId, updateData);
-
-      res.status(200).json(
-        createApiResponse(true, 'Profile updated successfully', updatedProfile)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
-
-  addCoins = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-      const { amount, paymentMethod } = req.body;
-
-      const result = await this.userService.addCoins(userId, amount, paymentMethod);
-
-      res.status(200).json(
-        createApiResponse(true, 'Coins added successfully', result)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
-
-  getWalletBalance = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-      const balance = await this.userService.getWalletBalance(userId);
-
-      res.status(200).json(
-        createApiResponse(true, 'Wallet balance retrieved successfully', { balance })
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
-
-  getTransactionHistory = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-      const { page = 1, limit = 10 } = req.query;
-
-      const { transactions, total } = await this.userService.getTransactionHistory(
-        userId,
-        Number(page),
-        Number(limit)
-      );
-
-      const pagination = calculatePagination(Number(page), Number(limit), total);
-
-      res.status(200).json(
-        createApiResponse(true, 'Transaction history retrieved successfully', {
-          transactions,
-          pagination
-        })
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
+  getWalletBalance = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    res.json(
+      createApiResponse(true, 'Wallet balance retrieved successfully', {
+        balance: req.user!.walletBalance,
+        currency: 'INR'
+      })
+    );
+  });
 }

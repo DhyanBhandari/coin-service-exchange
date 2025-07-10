@@ -1,20 +1,30 @@
 import { Router } from 'express';
 import { UserController } from '@/controllers/user.controller';
-import { validateBody, validateQuery } from '@/middleware/validation.middleware';
 import { authenticateToken } from '@/middleware/auth.middleware';
-import { requireUser } from '@/middleware/role.middleware';
-import { userValidation, paginationValidation } from '@/utils/validation';
+import { checkOwnership, requireAnyRole } from '@/middleware/role.middleware';
+import { validateBody, validateParams } from '@/middleware/validation.middleware';
+import Joi from 'joi';
 
 const router = Router();
 const userController = new UserController();
 
-// All routes require authentication
-router.use(authenticateToken);
+# Validation schemas
+const updateProfileSchema = Joi.object({
+  name: Joi.string().min(2).max(100).optional(),
+  phone: Joi.string().optional(),
+  address: Joi.object().optional(),
+  preferences: Joi.object().optional(),
+  profileImage: Joi.string().uri().optional()
+});
 
-router.get('/profile', userController.getProfile);
-router.put('/profile', validateBody(userValidation.updateProfile), userController.updateProfile);
-router.post('/coins/add', requireUser, validateBody(userValidation.addCoins), userController.addCoins);
-router.get('/wallet/balance', userController.getWalletBalance);
-router.get('/transactions', validateQuery(paginationValidation), userController.getTransactionHistory);
+const userIdSchema = Joi.object({
+  id: Joi.string().uuid().required()
+});
+
+# Routes
+router.get('/profile', authenticateToken, requireAnyRole, userController.getProfile);
+router.put('/profile', authenticateToken, requireAnyRole, validateBody(updateProfileSchema), userController.updateProfile);
+router.get('/wallet', authenticateToken, requireAnyRole, userController.getWalletBalance);
+router.get('/:id', authenticateToken, validateParams(userIdSchema), checkOwnership, userController.getUserById);
 
 export default router;

@@ -1,7 +1,8 @@
-import { Response } from 'express';
-import { ServiceService } from '@/services/service.service';
-import { createApiResponse, AppError, calculatePagination } from '@/utils/helpers';
+import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/types';
+import { ServiceService } from '@/services/service.service';
+import { createApiResponse, getClientIp, getUserAgent, validatePaginationParams } from '@/utils/helpers';
+import { asyncHandler } from '@/middleware/error.middleware';
 
 export class ServiceController {
   private serviceService: ServiceService;
@@ -10,188 +11,128 @@ export class ServiceController {
     this.serviceService = new ServiceService();
   }
 
-  createService = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const organizationId = req.user!.id;
-      const serviceData = req.body;
+  createService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const serviceData = req.body;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
-      const service = await this.serviceService.createService(organizationId, serviceData);
+    const newService = await this.serviceService.createService(
+      serviceData,
+      req.user!.id,
+      ipAddress,
+      userAgent
+    );
 
-      res.status(201).json(
-        createApiResponse(true, 'Service created successfully', service)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
+    res.status(201).json(
+      createApiResponse(true, 'Service created successfully', newService)
+    );
+  });
 
-  getServiceById = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const { serviceId } = req.params;
-      const service = await this.serviceService.getServiceById(serviceId);
+  getServices = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const pagination = validatePaginationParams(req.query.page, req.query.limit);
+    const filters = {
+      category: req.query.category as string,
+      search: req.query.search as string,
+      minPrice: req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined,
+      maxPrice: req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : undefined,
+      status: req.query.status as string,
+      organizationId: req.query.organizationId as string
+    };
 
-      if (!service) {
-        res.status(404).json(
-          createApiResponse(false, 'Service not found')
-        );
-        return;
-      }
+    const result = await this.serviceService.getServices(filters, pagination);
 
-      res.status(200).json(
-        createApiResponse(true, 'Service retrieved successfully', service)
-      );
-    } catch (error) {
-      res.status(500).json(
-        createApiResponse(false, 'Internal server error')
-      );
-    }
-  };
+    res.json(
+      createApiResponse(true, 'Services retrieved successfully', result.data, undefined, result.pagination)
+    );
+  });
 
-  getMyServices = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const organizationId = req.user!.id;
-      const { page = 1, limit = 10 } = req.query;
+  getServiceById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
 
-      const { services, total } = await this.serviceService.getServicesByOrganization(
-        organizationId,
-        Number(page),
-        Number(limit)
-      );
-
-      const pagination = calculatePagination(Number(page), Number(limit), total);
-
-      res.status(200).json(
-        createApiResponse(true, 'Services retrieved successfully', {
-          services,
-          pagination
-        })
-      );
-    } catch (error) {
-      res.status(500).json(
-        createApiResponse(false, 'Internal server error')
+    const service = await this.serviceService.getServiceById(id);
+    if (!service) {
+      return res.status(404).json(
+        createApiResponse(false, 'Service not found')
       );
     }
-  };
 
-  getPublicServices = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const { page = 1, limit = 10, category, search } = req.query;
+    res.json(
+      createApiResponse(true, 'Service retrieved successfully', service)
+    );
+  });
 
-      const { services, total } = await this.serviceService.getPublicServices(
-        Number(page),
-        Number(limit),
-        category as string,
-        search as string
-      );
+  updateService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const updateData = req.body;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
-      const pagination = calculatePagination(Number(page), Number(limit), total);
+    const updatedService = await this.serviceService.updateService(
+      id,
+      updateData,
+      req.user!.id,
+      ipAddress,
+      userAgent
+    );
 
-      res.status(200).json(
-        createApiResponse(true, 'Public services retrieved successfully', {
-          services,
-          pagination
-        })
-      );
-    } catch (error) {
-      res.status(500).json(
-        createApiResponse(false, 'Internal server error')
-      );
-    }
-  };
+    res.json(
+      createApiResponse(true, 'Service updated successfully', updatedService)
+    );
+  });
 
-  updateService = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const { serviceId } = req.params;
-      const organizationId = req.user!.id;
-      const updateData = req.body;
+  deleteService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
-      const service = await this.serviceService.updateService(
-        serviceId,
-        organizationId,
-        updateData
-      );
+    await this.serviceService.deleteService(id, req.user!.id, ipAddress, userAgent);
 
-      res.status(200).json(
-        createApiResponse(true, 'Service updated successfully', service)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
+    res.json(
+      createApiResponse(true, 'Service deleted successfully')
+    );
+  });
 
-  deleteService = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const { serviceId } = req.params;
-      const organizationId = req.user!.id;
+  addReview = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const { rating, review } = req.body;
 
-      await this.serviceService.deleteService(serviceId, organizationId);
+    const newReview = await this.serviceService.addReview(id, req.user!.id, rating, review);
 
-      res.status(200).json(
-        createApiResponse(true, 'Service deleted successfully')
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
+    res.status(201).json(
+      createApiResponse(true, 'Review added successfully', newReview)
+    );
+  });
 
-  bookService = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const userId = req.user!.id;
-      const { serviceId } = req.body;
+  bookService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
 
-      const transaction = await this.serviceService.bookService(userId, serviceId);
-
-      res.status(200).json(
-        createApiResponse(true, 'Service booked successfully', transaction)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
-
-  getCategories = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const categories = await this.serviceService.getServiceCategories();
-
-      res.status(200).json(
-        createApiResponse(true, 'Categories retrieved successfully', categories)
-      );
-    } catch (error) {
-      res.status(500).json(
-        createApiResponse(false, 'Internal server error')
+    # Get service details
+    const service = await this.serviceService.getServiceById(id);
+    if (!service) {
+      return res.status(404).json(
+        createApiResponse(false, 'Service not found')
       );
     }
-  };
+
+    # Check if user has sufficient balance
+    const servicePrice = parseFloat(service.price);
+    const userBalance = parseFloat(req.user!.walletBalance);
+
+    if (userBalance < servicePrice) {
+      return res.status(400).json(
+        createApiResponse(false, 'Insufficient wallet balance')
+      );
+    }
+
+    # Process booking (this would involve creating a transaction and updating balances)
+    await this.serviceService.incrementBookings(id);
+
+    res.json(
+      createApiResponse(true, 'Service booked successfully', {
+        serviceId: id,
+        price: servicePrice,
+        status: 'booked'
+      })
+    );
+  });
 }

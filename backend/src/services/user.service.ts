@@ -1,211 +1,217 @@
 import { db } from '@/config/database';
-import { users, transactions } from '@/models/schema';
-import { eq, desc } from 'drizzle-orm';
-import { AppError, generateOrderId } from '@/utils/helpers';
-import { User, Transaction } from '@/types';
-import { TRANSACTION_TYPES, TRANSACTION_STATUS, MIN_COIN_PURCHASE } from '@/utils/constants';
+import { users } from '@/models/schema';
+import { eq } from 'drizzle-orm';
+import { User, NewUser } from '@/models/schema';
+import { sanitizeUser, createError } from '@/utils/helpers';
+import { USER_STATUS } from '@/utils/constants';
+import { AuditService } from './audit.service';
+import { logger } from '@/utils/logger';
 
 export class UserService {
-  async getUserProfile(userId: string): Promise<User> {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+  private auditService: AuditService;
 
-    if (!user) {
-      throw new AppError('User not found', 404);
-    }
-
-    const { password, ...sanitizedUser } = user;
-    return sanitizedUser as User;
+  constructor() {
+    this.auditService = new AuditService();
   }
 
-  async updateProfile(userId: string, updateData: Partial<User>): Promise<User> {
-    const [updatedUser] = await db
-      .update(users)
-      .set({
-        ...updateData,
-        updatedAt: new Date()
-      })
-      .where(eq(users.id, userId))
-      .returning();
-
-    if (!updatedUser) {
-      throw new AppError('User not found', 404);
-    }
-
-    const { password, ...sanitizedUser } = updatedUser;
-    return sanitizedUser as User;
-  }
-
-  async addCoins(
+  async updateProfile(
     userId: string,
-    amount: number,
-    paymentMethod: string
-  ): Promise<{ transaction: Transaction; newBalance: number }> {
-    if (amount < MIN_COIN_PURCHASE) {
-      throw new AppError(`Minimum purchase amount is ${MIN_COIN_PURCHASE} coins`, 400);
-    }
-
-    // Start transaction
-    return await db.transaction(async (tx) => {
-      // Get current user
-      const [user] = await tx
+    updateData: Partial<User>,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<User> {
+    try {
+      const [existingUser] = await db
         .select()
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
 
-      if (!user) {
-        throw new AppError('User not found', 404);
+      if (!existingUser) {
+        throw createError('User not found', 404);
       }
 
-      // Create transaction record
-      const [transaction] = await tx
-        .insert(transactions)
-        .values({
-          userId,
-          type: TRANSACTION_TYPES.COIN_PURCHASE,
-          amount: amount.toString(),
-          status: TRANSACTION_STATUS.COMPLETED,
-          description: `Coin purchase via ${paymentMethod}`,
-          metadata: {
-            paymentMethod,
-            orderId: generateOrderId()
-          }
-        })
-        .returning();
-
-      // Update user wallet balance
-      const newBalance = parseFloat(user.walletBalance) + amount;
-      
-      await tx
+      const [updatedUser] = await db
         .update(users)
         .set({
-          walletBalance: newBalance.toString(),
+          ...updateData,
           updatedAt: new Date()
         })
-        .where(eq(users.id, userId));
+        .where(eq(users.id, userId))
+        .returning();
 
-      return { transaction: transaction as Transaction, newBalance };
-    });
-  }
-
-  async getWalletBalance(userId: string): Promise<number> {
-    const [user] = await db
-      .select({ walletBalance: users.walletBalance })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) {
-      throw new AppError('User not found', 404);
-    }
-
-    return parseFloat(user.walletBalance);
-  }
-
-  async getTransactionHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ): Promise<{ transactions: Transaction[]; total: number }> {
-    const offset = (page - 1) * limit;
-
-    const userTransactions = await db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.userId, userId))
-      .orderBy(desc(transactions.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(transactions)
-      .where(eq(transactions.userId, userId));
-
-    return {
-      transactions: userTransactions as Transaction[],
-      total: count
-    };
-  }
-// Add this method to the existing UserService class
-
-async addCoinsAfterPayment(
-  userId: string,
-  amount: number,
-  paymentId: string
-): Promise<{ transaction: Transaction; newBalance: number }> {
-  return await db.transaction(async (tx) => {
-    // Get current user
-    const [user] = await tx
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) {
-      throw new AppError('User not found', 404);
-    }
-
-    // Create transaction record
-    const [transaction] = await tx
-      .insert(transactions)
-      .values({
+      # Log audit
+      await this.auditService.log({
         userId,
-        type: TRANSACTION_TYPES.COIN_PURCHASE,
-        amount: amount.toString(),
-        status: TRANSACTION_STATUS.COMPLETED,
-        description: `Coin purchase via Razorpay`,
-        metadata: {
-          paymentId,
-          paymentMethod: 'razorpay'
-        }
-      })
-      .returning();
+        action: 'update',
+        resource: 'user',
+        resourceId: userId,
+        oldValues: sanitizeUser(existingUser),
+        newValues: sanitizeUser(updatedUser),
+        ipAddress,
+        userAgent
+      });
 
-    // Update user wallet balance
-    const newBalance = parseFloat(user.walletBalance) + amount;
-    
-    await tx
-      .update(users)
-      .set({
-        walletBalance: newBalance.toString(),
-        updatedAt: new Date()
-      })
-      .where(eq(users.id, userId));
+      logger.info(`User profile updated: ${userId}`);
+      return sanitizeUser(updatedUser) as User;
+    } catch (error) {
+      logger.error('Update profile error:', error);
+      throw error;
+    }
+  }
 
-    return { transaction: transaction as Transaction, newBalance };
-  });
-}
-  async deductCoins(userId: string, amount: number): Promise<void> {
-    await db.transaction(async (tx) => {
-      const [user] = await tx
+  async updateWalletBalance(
+    userId: string,
+    amount: string,
+    operation: 'add' | 'subtract' = 'add'
+  ): Promise<User> {
+    try {
+      const [user] = await db
         .select()
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
 
       if (!user) {
-        throw new AppError('User not found', 404);
+        throw createError('User not found', 404);
       }
 
       const currentBalance = parseFloat(user.walletBalance);
-      if (currentBalance < amount) {
-        throw new AppError('Insufficient wallet balance', 400);
+      const changeAmount = parseFloat(amount);
+      
+      let newBalance: number;
+      if (operation === 'add') {
+        newBalance = currentBalance + changeAmount;
+      } else {
+        newBalance = currentBalance - changeAmount;
+        if (newBalance < 0) {
+          throw createError('Insufficient wallet balance', 400);
+        }
       }
 
-      const newBalance = currentBalance - amount;
-
-      await tx
+      const [updatedUser] = await db
         .update(users)
         .set({
           walletBalance: newBalance.toString(),
           updatedAt: new Date()
         })
-        .where(eq(users.id, userId));
-    });
+        .where(eq(users.id, userId))
+        .returning();
+
+      logger.info(`Wallet balance updated for user ${userId}: ${currentBalance} -> ${newBalance}`);
+      return sanitizeUser(updatedUser) as User;
+    } catch (error) {
+      logger.error('Update wallet balance error:', error);
+      throw error;
+    }
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+
+      return user ? sanitizeUser(user) as User : null;
+    } catch (error) {
+      logger.error('Get user by ID error:', error);
+      throw error;
+    }
+  }
+
+  async suspendUser(
+    userId: string,
+    adminId: string,
+    reason: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<User> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          status: USER_STATUS.SUSPENDED,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      # Log audit
+      await this.auditService.log({
+        userId: adminId,
+        action: 'suspend',
+        resource: 'user',
+        resourceId: userId,
+        oldValues: { status: user.status },
+        newValues: { status: USER_STATUS.SUSPENDED },
+        metadata: { reason },
+        ipAddress,
+        userAgent
+      });
+
+      logger.info(`User suspended: ${userId} by admin: ${adminId}`);
+      return sanitizeUser(updatedUser) as User;
+    } catch (error) {
+      logger.error('Suspend user error:', error);
+      throw error;
+    }
+  }
+
+  async reactivateUser(
+    userId: string,
+    adminId: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<User> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          status: USER_STATUS.ACTIVE,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      # Log audit
+      await this.auditService.log({
+        userId: adminId,
+        action: 'activate',
+        resource: 'user',
+        resourceId: userId,
+        oldValues: { status: user.status },
+        newValues: { status: USER_STATUS.ACTIVE },
+        ipAddress,
+        userAgent
+      });
+
+      logger.info(`User reactivated: ${userId} by admin: ${adminId}`);
+      return sanitizeUser(updatedUser) as User;
+    } catch (error) {
+      logger.error('Reactivate user error:', error);
+      throw error;
+    }
   }
 }

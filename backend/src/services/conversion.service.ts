@@ -1,193 +1,247 @@
 import { db } from '@/config/database';
-import { conversionRequests, users } from '@/models/schema';
-import { eq, desc, sql } from 'drizzle-orm';
-import { AppError } from '@/utils/helpers';
-import { ConversionRequest } from '@/types';
-import { CONVERSION_STATUS, MIN_CONVERSION_AMOUNT } from '@/utils/constants';
+import { conversionRequests } from '@/models/schema';
+import { eq, desc, and } from 'drizzle-orm';
+import { ConversionRequest, NewConversionRequest } from '@/models/schema';
+import { createError, calculatePagination } from '@/utils/helpers';
+import { CONVERSION_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '@/utils/constants';
+import { PaginationParams, PaginatedResponse } from '@/types';
+import { TransactionService } from './transaction.service';
+import { UserService } from './user.service';
+import { AuditService } from './audit.service';
+import { logger } from '@/utils/logger';
 
 export class ConversionService {
+  private transactionService: TransactionService;
+  private userService: UserService;
+  private auditService: AuditService;
+
+  constructor() {
+    this.transactionService = new TransactionService();
+    this.userService = new UserService();
+    this.auditService = new AuditService();
+  }
+
   async createConversionRequest(
     organizationId: string,
     amount: number,
-    currency: string
+    bankDetails: any
   ): Promise<ConversionRequest> {
-    if (amount < MIN_CONVERSION_AMOUNT) {
-      throw new AppError(`Minimum conversion amount is ${MIN_CONVERSION_AMOUNT}`, 400);
-    }
+    try {
+      # Check if organization has sufficient balance
+      const user = await this.userService.getUserById(organizationId);
+      if (!user) {
+        throw createError('Organization not found', 404);
+      }
 
-    // Check if organization has sufficient balance
-    const [organization] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, organizationId))
-      .limit(1);
+      const currentBalance = parseFloat(user.walletBalance);
+      if (currentBalance < amount) {
+        throw createError('Insufficient wallet balance', 400);
+      }
 
-    if (!organization) {
-      throw new AppError('Organization not found', 404);
-    }
-
-    const orgBalance = parseFloat(organization.walletBalance);
-    if (orgBalance < amount) {
-      throw new AppError('Insufficient coin balance', 400);
-    }
-
-    const [conversionRequest] = await db
-      .insert(conversionRequests)
-      .values({
+      # Create conversion request
+      const conversionData: NewConversionRequest = {
         organizationId,
         amount: amount.toString(),
-        currency,
-        status: CONVERSION_STATUS.PENDING
-      })
-      .returning();
+        currency: 'INR',
+        status: CONVERSION_STATUS.PENDING,
+        bankDetails
+      };
 
-    return conversionRequest as ConversionRequest;
-  }
+      const [newRequest] = await db
+        .insert(conversionRequests)
+        .values(conversionData)
+        .returning();
 
-  async getConversionRequestById(requestId: string): Promise<ConversionRequest | null> {
-    const [request] = await db
-      .select()
-      .from(conversionRequests)
-      .where(eq(conversionRequests.id, requestId))
-      .limit(1);
+      # Log audit
+      await this.auditService.log({
+        userId: organizationId,
+        action: 'create',
+        resource: 'conversion',
+        resourceId: newRequest.id,
+        newValues: newRequest
+      });
 
-    return request as ConversionRequest || null;
-  }
-
-  async getOrganizationConversions(
-    organizationId: string,
-    page: number = 1,
-    limit: number = 10
-  ): Promise<{ conversions: ConversionRequest[]; total: number }> {
-    const offset = (page - 1) * limit;
-
-    const conversions = await db
-      .select()
-      .from(conversionRequests)
-      .where(eq(conversionRequests.organizationId, organizationId))
-      .orderBy(desc(conversionRequests.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(conversionRequests)
-      .where(eq(conversionRequests.organizationId, organizationId));
-
-    return {
-      conversions: conversions as ConversionRequest[],
-      total: count
-    };
-  }
-
-  async getAllConversions(
-    page: number = 1,
-    limit: number = 10,
-    status?: string
-  ): Promise<{ conversions: any[]; total: number }> {
-    const offset = (page - 1) * limit;
-
-    let whereCondition = undefined;
-    if (status) {
-      whereCondition = eq(conversionRequests.status, status);
+      logger.info(`Conversion request created: ${newRequest.id} by org: ${organizationId}`);
+      return newRequest;
+    } catch (error) {
+      logger.error('Create conversion request error:', error);
+      throw error;
     }
-
-    const conversions = await db
-      .select({
-        ...conversionRequests,
-        organizationName: users.name,
-        organizationEmail: users.email
-      })
-      .from(conversionRequests)
-      .leftJoin(users, eq(conversionRequests.organizationId, users.id))
-      .where(whereCondition)
-      .orderBy(desc(conversionRequests.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(conversionRequests)
-      .where(whereCondition);
-
-    return {
-      conversions,
-      total: count
-    };
   }
 
-  async updateConversionStatus(
+  async getConversionRequests(
+    pagination: PaginationParams,
+    organizationId?: string
+  ): Promise<PaginatedResponse<ConversionRequest>> {
+    try {
+      let query = db.select().from(conversionRequests);
+      
+      if (organizationId) {
+        query = query.where(eq(conversionRequests.organizationId, organizationId));
+      }
+
+      # Get total count
+      const totalQuery = organizationId 
+        ? db.select().from(conversionRequests).where(eq(conversionRequests.organizationId, organizationId))
+        : db.select().from(conversionRequests);
+      
+      const total = (await totalQuery).length;
+
+      # Apply pagination
+      const offset = (pagination.page - 1) * pagination.limit;
+      const data = await query
+        .orderBy(desc(conversionRequests.createdAt))
+        .limit(pagination.limit)
+        .offset(offset);
+
+      return {
+        data,
+        pagination: calculatePagination(pagination.page, pagination.limit, total)
+      };
+    } catch (error) {
+      logger.error('Get conversion requests error:', error);
+      throw error;
+    }
+  }
+
+  async approveConversionRequest(
     requestId: string,
-    status: 'approved' | 'rejected',
     adminId: string,
-    reason?: string
+    transactionId?: string
   ): Promise<ConversionRequest> {
-    return await db.transaction(async (tx) => {
-      const [request] = await tx
+    try {
+      const [request] = await db
         .select()
         .from(conversionRequests)
         .where(eq(conversionRequests.id, requestId))
         .limit(1);
 
       if (!request) {
-        throw new AppError('Conversion request not found', 404);
+        throw createError('Conversion request not found', 404);
       }
 
       if (request.status !== CONVERSION_STATUS.PENDING) {
-        throw new AppError('Conversion request has already been processed', 400);
+        throw createError('Conversion request is not pending', 400);
       }
 
-      const [updatedRequest] = await tx
+      # Update request status
+      const [updatedRequest] = await db
         .update(conversionRequests)
         .set({
-          status,
-          reason,
+          status: CONVERSION_STATUS.APPROVED,
           processedBy: adminId,
           processedAt: new Date(),
+          transactionId,
           updatedAt: new Date()
         })
         .where(eq(conversionRequests.id, requestId))
         .returning();
 
-      // If approved, deduct coins from organization's balance
-      if (status === CONVERSION_STATUS.APPROVED) {
-        const [organization] = await tx
-          .select()
-          .from(users)
-          .where(eq(users.id, request.organizationId))
-          .limit(1);
+      # Deduct amount from organization wallet
+      const amount = parseFloat(request.amount);
+      await this.userService.updateWalletBalance(
+        request.organizationId,
+        amount.toString(),
+        'subtract'
+      );
 
-        if (organization) {
-          const currentBalance = parseFloat(organization.walletBalance);
-          const conversionAmount = parseFloat(request.amount);
-          const newBalance = currentBalance - conversionAmount;
-
-          await tx
-            .update(users)
-            .set({
-              walletBalance: newBalance.toString(),
-              updatedAt: new Date()
-            })
-            .where(eq(users.id, request.organizationId));
+      # Create transaction record
+      await this.transactionService.createTransaction({
+        userId: request.organizationId,
+        type: TRANSACTION_TYPES.COIN_CONVERSION,
+        amount: amount.toString(),
+        status: TRANSACTION_STATUS.COMPLETED,
+        description: `Coin conversion to bank account`,
+        metadata: {
+          conversionRequestId: requestId,
+          bankDetails: request.bankDetails,
+          transactionId
         }
-      }
+      });
 
-      return updatedRequest as ConversionRequest;
-    });
+      # Log audit
+      await this.auditService.log({
+        userId: adminId,
+        action: 'approve',
+        resource: 'conversion',
+        resourceId: requestId,
+        oldValues: { status: request.status },
+        newValues: { status: CONVERSION_STATUS.APPROVED },
+        metadata: { amount, transactionId }
+      });
+
+      logger.info(`Conversion request approved: ${requestId} by admin: ${adminId}`);
+      return updatedRequest;
+    } catch (error) {
+      logger.error('Approve conversion request error:', error);
+      throw error;
+    }
   }
 
-  async getPendingConversions(): Promise<ConversionRequest[]> {
-    const pendingConversions = await db
-      .select({
-        ...conversionRequests,
-        organizationName: users.name,
-        organizationEmail: users.email
-      })
-      .from(conversionRequests)
-      .leftJoin(users, eq(conversionRequests.organizationId, users.id))
-      .where(eq(conversionRequests.status, CONVERSION_STATUS.PENDING))
-      .orderBy(desc(conversionRequests.createdAt));
+  async rejectConversionRequest(
+    requestId: string,
+    adminId: string,
+    reason: string
+  ): Promise<ConversionRequest> {
+    try {
+      const [request] = await db
+        .select()
+        .from(conversionRequests)
+        .where(eq(conversionRequests.id, requestId))
+        .limit(1);
 
-    return pendingConversions as ConversionRequest[];
+      if (!request) {
+        throw createError('Conversion request not found', 404);
+      }
+
+      if (request.status !== CONVERSION_STATUS.PENDING) {
+        throw createError('Conversion request is not pending', 400);
+      }
+
+      # Update request status
+      const [updatedRequest] = await db
+        .update(conversionRequests)
+        .set({
+          status: CONVERSION_STATUS.REJECTED,
+          processedBy: adminId,
+          processedAt: new Date(),
+          reason,
+          updatedAt: new Date()
+        })
+        .where(eq(conversionRequests.id, requestId))
+        .returning();
+
+      # Log audit
+      await this.auditService.log({
+        userId: adminId,
+        action: 'reject',
+        resource: 'conversion',
+        resourceId: requestId,
+        oldValues: { status: request.status },
+        newValues: { status: CONVERSION_STATUS.REJECTED },
+        metadata: { reason }
+      });
+
+      logger.info(`Conversion request rejected: ${requestId} by admin: ${adminId}`);
+      return updatedRequest;
+    } catch (error) {
+      logger.error('Reject conversion request error:', error);
+      throw error;
+    }
+  }
+
+  async getConversionRequestById(id: string): Promise<ConversionRequest | null> {
+    try {
+      const [request] = await db
+        .select()
+        .from(conversionRequests)
+        .where(eq(conversionRequests.id, id))
+        .limit(1);
+
+      return request || null;
+    } catch (error) {
+      logger.error('Get conversion request by ID error:', error);
+      throw error;
+    }
   }
 }

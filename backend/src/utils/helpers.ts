@@ -1,122 +1,66 @@
-import { v4 as uuidv4 } from 'uuid';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { ApiResponse, PaginationParams } from '@/types';
+// src/utils/helpers.ts
+// Assuming '@/types' exists and defines ApiResponse and PaginationInfo
+import { ApiResponse, PaginationInfo } from '@/types';
 
+/**
+ * Custom Error class for operational errors.
+ * This class extends the built-in Error class and adds statusCode, status, and isOperational properties.
+ * It helps differentiate between operational errors (e.g., invalid input) and programming errors (e.g., bugs).
+ */
 export class AppError extends Error {
-  public statusCode: number;
-  public isOperational: boolean;
+    statusCode: number;
+    status: string;
+    isOperational: boolean;
 
-  constructor(message: string, statusCode: number) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-    Error.captureStackTrace(this, this.constructor);
-  }
+    /**
+     * Creates an instance of AppError.
+     * @param message The error message.
+     * @param statusCode The HTTP status code associated with the error.
+     */
+    constructor(message: string, statusCode: number) {
+        super(message); // Call the parent Error constructor
+        this.statusCode = statusCode;
+        // Determine status based on status code (e.g., 4xx for 'fail', 5xx for 'error')
+        this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+        this.isOperational = true; // Mark as an operational error
+
+        // Capture the stack trace, excluding the constructor call itself
+        Error.captureStackTrace(this, this.constructor);
+    }
 }
 
-export const generateId = (): string => uuidv4();
-
-export const hashPassword = async (password: string): Promise<string> => {
-  const saltRounds = 12;
-  return bcrypt.hash(password, saltRounds);
-};
-
-export const comparePassword = async (
-  password: string,
-  hashedPassword: string
-): Promise<boolean> => {
-  return bcrypt.compare(password, hashedPassword);
-};
-
-export const generateToken = (payload: object): string => {
-  return jwt.sign(payload, process.env.JWT_SECRET!, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
-  });
-};
-
-export const verifyToken = (token: string): any => {
-  return jwt.verify(token, process.env.JWT_SECRET!);
-};
-
+/**
+ * Creates a standardized API response object.
+ * @param success Indicates if the API call was successful.
+ * @param message A descriptive message for the response.
+ * @param data The actual data payload (optional).
+ * @param pagination Pagination information (optional).
+ * @param statusCode The HTTP status code to be returned (defaults to 200).
+ * @returns A structured API response object.
+ */
 export const createApiResponse = <T>(
-  success: boolean,
-  message: string,
-  data?: T,
-  error?: string
+    success: boolean,
+    message: string,
+    data: T | null = null,
+    pagination: PaginationInfo | null = null,
+    statusCode: number = 200
 ): ApiResponse<T> => {
-  return {
-    success,
-    message,
-    data,
-    error,
-    timestamp: new Date().toISOString()
-  };
+    const response: ApiResponse<T> = {
+        success,
+        message,
+        timestamp: new Date().toISOString(),
+    };
+    if (data !== null && data !== undefined) {
+        response.data = data;
+    }
+    if (pagination !== null && pagination !== undefined) {
+        response.pagination = pagination;
+    }
+    return response;
 };
 
-export const calculatePagination = (
-  page: number,
-  limit: number,
-  total: number
-) => {
-  const totalPages = Math.ceil(total / limit);
-  const hasNext = page < totalPages;
-  const hasPrev = page > 1;
-
-  return {
-    page,
-    limit,
-    total,
-    totalPages,
-    hasNext,
-    hasPrev
-  };
-};
-
-export const validatePaginationParams = (
-  page?: string,
-  limit?: string
-): PaginationParams => {
-  const parsedPage = parseInt(page || '1', 10);
-  const parsedLimit = parseInt(limit || '10', 10);
-
-  return {
-    page: Math.max(1, parsedPage),
-    limit: Math.min(100, Math.max(1, parsedLimit))
-  };
-};
-
-export const sanitizeUser = (user: any) => {
-  const { password, ...sanitizedUser } = user;
-  return sanitizedUser;
-};
-
-export const generateOrderId = (): string => {
-  return `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-};
-
-export const formatCurrency = (amount: number, currency: string): string => {
-  const symbols: Record<string, string> = {
-    INR: '₹',
-    USD: '$',
-    EUR: '€'
-  };
-  return `${symbols[currency] || currency}${amount}`;
-};
-
-export const isValidEmail = (email: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-};
-
-export const isValidPassword = (password: string): boolean => {
-  return password.length >= 8;
-};
-
-export const generateRandomString = (length: number = 32): string => {
-  return Math.random().toString(36).substring(2, length + 2);
-};
-
-export const sleep = (ms: number): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms));
-};
+/**
+ * Checks if the current environment is development.
+ * @returns True if NODE_ENV is 'development', false otherwise.
+ */
+export const isDevelopment = process.env.NODE_ENV === 'development';

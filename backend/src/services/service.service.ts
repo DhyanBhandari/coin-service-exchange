@@ -1,233 +1,362 @@
 import { db } from '@/config/database';
-import { services, users, transactions } from '@/models/schema';
-import { eq, and, desc, ilike, sql } from 'drizzle-orm';
-import { AppError } from '@/utils/helpers';
-import { Service, Transaction } from '@/types';
-import { SERVICE_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '@/utils/constants';
+import { services, users, serviceReviews } from '@/models/schema';
+import { eq, and, desc, asc, ilike, gte, lte, sql } from 'drizzle-orm';
+import { Service, NewService, ServiceReview, NewServiceReview } from '@/models/schema';
+import { createError, calculatePagination } from '@/utils/helpers';
+import { SERVICE_STATUS } from '@/utils/constants';
+import { ServiceFilters, PaginationParams, PaginatedResponse } from '@/types';
+import { AuditService } from './audit.service';
+import { logger } from '@/utils/logger';
 
 export class ServiceService {
-  async createService(organizationId: string, serviceData: {
-    title: string;
-    description: string;
-    price: number;
-    category: string;
-    features?: string[];
-  }): Promise<Service> {
-    const [newService] = await db
-      .insert(services)
-      .values({
-        ...serviceData,
-        organizationId,
-        features: serviceData.features || [],
-        status: SERVICE_STATUS.PENDING
-      })
-      .returning();
+  private auditService: AuditService;
 
-    return newService as Service;
+  constructor() {
+    this.auditService = new AuditService();
   }
 
-  async getServiceById(serviceId: string): Promise<Service | null> {
-    const [service] = await db
-      .select()
-      .from(services)
-      .where(eq(services.id, serviceId))
-      .limit(1);
+  async createService(
+    serviceData: NewService,
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<Service> {
+    try {
+      const [newService] = await db
+        .insert(services)
+        .values({
+          ...serviceData,
+          organizationId: userId,
+          status: SERVICE_STATUS.PENDING
+        })
+        .returning();
 
-    return service as Service || null;
-  }
+      # Log audit
+      await this.auditService.log({
+        userId,
+        action: 'create',
+        resource: 'service',
+        resourceId: newService.id,
+        newValues: newService,
+        ipAddress,
+        userAgent
+      });
 
-  async getServicesByOrganization(
-    organizationId: string,
-    page: number = 1,
-    limit: number = 10
-  ): Promise<{ services: Service[]; total: number }> {
-    const offset = (page - 1) * limit;
-
-    const orgServices = await db
-      .select()
-      .from(services)
-      .where(eq(services.organizationId, organizationId))
-      .orderBy(desc(services.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(services)
-      .where(eq(services.organizationId, organizationId));
-
-    return {
-      services: orgServices as Service[],
-      total: count
-    };
-  }
-
-  async getPublicServices(
-    page: number = 1,
-    limit: number = 10,
-    category?: string,
-    search?: string
-  ): Promise<{ services: Service[]; total: number }> {
-    const offset = (page - 1) * limit;
-
-    let whereConditions = eq(services.status, SERVICE_STATUS.ACTIVE);
-
-    if (category) {
-      whereConditions = and(whereConditions, eq(services.category, category));
+      logger.info(`New service created: ${newService.id} by org: ${userId}`);
+      return newService;
+    } catch (error) {
+      logger.error('Create service error:', error);
+      throw error;
     }
+  }
 
-    if (search) {
-      whereConditions = and(
-        whereConditions,
-        ilike(services.title, `%${search}%`)
-      );
+  async getServices(
+    filters: ServiceFilters = {},
+    pagination: PaginationParams
+  ): Promise<PaginatedResponse<Service>> {
+    try {
+      let query = db.select().from(services);
+      let countQuery = db.select({ count: sql<number>`count(*)` }).from(services);
+
+      # Apply filters
+      const conditions = [];
+
+      if (filters.category) {
+        conditions.push(eq(services.category, filters.category));
+      }
+
+      if (filters.status) {
+        conditions.push(eq(services.status, filters.status));
+      }
+
+      if (filters.organizationId) {
+        conditions.push(eq(services.organizationId, filters.organizationId));
+      }
+
+      if (filters.search) {
+        conditions.push(
+          ilike(services.title, `%${filters.search}%`)
+        );
+      }
+
+      if (filters.minPrice) {
+        conditions.push(gte(services.price, filters.minPrice.toString()));
+      }
+
+      if (filters.maxPrice) {
+        conditions.push(lte(services.price, filters.maxPrice.toString()));
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+        countQuery = countQuery.where(and(...conditions));
+      }
+
+      # Get total count
+      const [{ count: total }] = await countQuery;
+
+      # Apply pagination and sorting
+      const offset = (pagination.page - 1) * pagination.limit;
+      const orderColumn = pagination.sortBy === 'price' ? services.price :
+                         pagination.sortBy === 'rating' ? services.rating :
+                         services.createdAt;
+      
+      const orderDirection = pagination.sortOrder === 'desc' ? desc : asc;
+      
+      const data = await query
+        .orderBy(orderDirection(orderColumn))
+        .limit(pagination.limit)
+        .offset(offset);
+
+      return {
+        data,
+        pagination: calculatePagination(pagination.page, pagination.limit, total)
+      };
+    } catch (error) {
+      logger.error('Get services error:', error);
+      throw error;
     }
+  }
 
-    const publicServices = await db
-      .select({
-        ...services,
-        organizationName: users.name
-      })
-      .from(services)
-      .leftJoin(users, eq(services.organizationId, users.id))
-      .where(whereConditions)
-      .orderBy(desc(services.createdAt))
-      .limit(limit)
-      .offset(offset);
+  async getServiceById(id: string): Promise<Service | null> {
+    try {
+      const [service] = await db
+        .select()
+        .from(services)
+        .where(eq(services.id, id))
+        .limit(1);
 
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(services)
-      .where(whereConditions);
-
-    return {
-      services: publicServices as Service[],
-      total: count
-    };
+      return service || null;
+    } catch (error) {
+      logger.error('Get service by ID error:', error);
+      throw error;
+    }
   }
 
   async updateService(
-    serviceId: string,
-    organizationId: string,
-    updateData: Partial<Service>
+    id: string,
+    updateData: Partial<Service>,
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string
   ): Promise<Service> {
-    const [updatedService] = await db
-      .update(services)
-      .set({
-        ...updateData,
-        updatedAt: new Date()
-      })
-      .where(
-        and(
-          eq(services.id, serviceId),
-          eq(services.organizationId, organizationId)
-        )
-      )
-      .returning();
+    try {
+      const [existingService] = await db
+        .select()
+        .from(services)
+        .where(eq(services.id, id))
+        .limit(1);
 
-    if (!updatedService) {
-      throw new AppError('Service not found or unauthorized', 404);
+      if (!existingService) {
+        throw createError('Service not found', 404);
+      }
+
+      const [updatedService] = await db
+        .update(services)
+        .set({
+          ...updateData,
+          updatedAt: new Date()
+        })
+        .where(eq(services.id, id))
+        .returning();
+
+      # Log audit
+      await this.auditService.log({
+        userId,
+        action: 'update',
+        resource: 'service',
+        resourceId: id,
+        oldValues: existingService,
+        newValues: updatedService,
+        ipAddress,
+        userAgent
+      });
+
+      logger.info(`Service updated: ${id} by user: ${userId}`);
+      return updatedService;
+    } catch (error) {
+      logger.error('Update service error:', error);
+      throw error;
     }
-
-    return updatedService as Service;
   }
 
-  async deleteService(serviceId: string, organizationId: string): Promise<void> {
-    const result = await db
-      .delete(services)
-      .where(
-        and(
-          eq(services.id, serviceId),
-          eq(services.organizationId, organizationId)
-        )
-      );
+  async deleteService(
+    id: string,
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    try {
+      const [existingService] = await db
+        .select()
+        .from(services)
+        .where(eq(services.id, id))
+        .limit(1);
 
-    if (result.rowCount === 0) {
-      throw new AppError('Service not found or unauthorized', 404);
+      if (!existingService) {
+        throw createError('Service not found', 404);
+      }
+
+      await db.delete(services).where(eq(services.id, id));
+
+      # Log audit
+      await this.auditService.log({
+        userId,
+        action: 'delete',
+        resource: 'service',
+        resourceId: id,
+        oldValues: existingService,
+        ipAddress,
+        userAgent
+      });
+
+      logger.info(`Service deleted: ${id} by user: ${userId}`);
+    } catch (error) {
+      logger.error('Delete service error:', error);
+      throw error;
     }
   }
 
-  async bookService(userId: string, serviceId: string): Promise<Transaction> {
-    return await db.transaction(async (tx) => {
-      // Get service details
-      const [service] = await tx
+  async approveService(
+    id: string,
+    adminId: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<Service> {
+    try {
+      const [service] = await db
+        .select()
+        .from(services)
+        .where(eq(services.id, id))
+        .limit(1);
+
+      if (!service) {
+        throw createError('Service not found', 404);
+      }
+
+      const [updatedService] = await db
+        .update(services)
+        .set({
+          status: SERVICE_STATUS.ACTIVE,
+          updatedAt: new Date()
+        })
+        .where(eq(services.id, id))
+        .returning();
+
+      # Log audit
+      await this.auditService.log({
+        userId: adminId,
+        action: 'approve',
+        resource: 'service',
+        resourceId: id,
+        oldValues: { status: service.status },
+        newValues: { status: SERVICE_STATUS.ACTIVE },
+        ipAddress,
+        userAgent
+      });
+
+      logger.info(`Service approved: ${id} by admin: ${adminId}`);
+      return updatedService;
+    } catch (error) {
+      logger.error('Approve service error:', error);
+      throw error;
+    }
+  }
+
+  async addReview(
+    serviceId: string,
+    userId: string,
+    rating: number,
+    review?: string
+  ): Promise<ServiceReview> {
+    try {
+      # Check if service exists
+      const [service] = await db
         .select()
         .from(services)
         .where(eq(services.id, serviceId))
         .limit(1);
 
       if (!service) {
-        throw new AppError('Service not found', 404);
+        throw createError('Service not found', 404);
       }
 
-      if (service.status !== SERVICE_STATUS.ACTIVE) {
-        throw new AppError('Service is not available for booking', 400);
-      }
-
-      // Get user details
-      const [user] = await tx
+      # Check if user already reviewed this service
+      const [existingReview] = await db
         .select()
-        .from(users)
-        .where(eq(users.id, userId))
+        .from(serviceReviews)
+        .where(and(
+          eq(serviceReviews.serviceId, serviceId),
+          eq(serviceReviews.userId, userId)
+        ))
         .limit(1);
 
-      if (!user) {
-        throw new AppError('User not found', 404);
+      if (existingReview) {
+        throw createError('You have already reviewed this service', 409);
       }
 
-      const servicePrice = parseFloat(service.price);
-      const userBalance = parseFloat(user.walletBalance);
-
-      if (userBalance < servicePrice) {
-        throw new AppError('Insufficient wallet balance', 400);
-      }
-
-      // Create transaction
-      const [transaction] = await tx
-        .insert(transactions)
+      # Create review
+      const [newReview] = await db
+        .insert(serviceReviews)
         .values({
-          userId,
           serviceId,
-          type: TRANSACTION_TYPES.SERVICE_BOOKING,
-          amount: service.price,
-          status: TRANSACTION_STATUS.COMPLETED,
-          description: `Booked service: ${service.title}`,
-          metadata: {
-            serviceName: service.title,
-            organizationId: service.organizationId
-          }
+          userId,
+          rating,
+          review
         })
         .returning();
 
-      // Update user balance
-      const newBalance = userBalance - servicePrice;
-      await tx
-        .update(users)
+      # Update service rating
+      await this.updateServiceRating(serviceId);
+
+      logger.info(`Review added for service: ${serviceId} by user: ${userId}`);
+      return newReview;
+    } catch (error) {
+      logger.error('Add review error:', error);
+      throw error;
+    }
+  }
+
+  private async updateServiceRating(serviceId: string): Promise<void> {
+    try {
+      const reviews = await db
+        .select()
+        .from(serviceReviews)
+        .where(and(
+          eq(serviceReviews.serviceId, serviceId),
+          eq(serviceReviews.isVisible, true)
+        ));
+
+      if (reviews.length === 0) return;
+
+      const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+      const averageRating = totalRating / reviews.length;
+
+      await db
+        .update(services)
         .set({
-          walletBalance: newBalance.toString(),
+          rating: averageRating.toFixed(2),
+          reviewCount: reviews.length,
           updatedAt: new Date()
         })
-        .where(eq(users.id, userId));
+        .where(eq(services.id, serviceId));
+    } catch (error) {
+      logger.error('Update service rating error:', error);
+    }
+  }
 
-      // Update service bookings count
-      await tx
+  async incrementBookings(serviceId: string): Promise<void> {
+    try {
+      await db
         .update(services)
         .set({
           bookings: sql`${services.bookings} + 1`,
           updatedAt: new Date()
         })
         .where(eq(services.id, serviceId));
-
-      return transaction as Transaction;
-    });
-  }
-
-  async getServiceCategories(): Promise<string[]> {
-    const categories = await db
-      .selectDistinct({ category: services.category })
-      .from(services)
-      .where(eq(services.status, SERVICE_STATUS.ACTIVE));
-
-    return categories.map(c => c.category);
+    } catch (error) {
+      logger.error('Increment bookings error:', error);
+      throw error;
+    }
   }
 }

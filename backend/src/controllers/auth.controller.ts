@@ -1,6 +1,8 @@
-import { Request, Response } from 'express';
+import { Response, NextFunction } from 'express';
+import { AuthRequest } from '@/types';
 import { AuthService } from '@/services/auth.service';
-import { createApiResponse, AppError } from '@/utils/helpers';
+import { createApiResponse, getClientIp, getUserAgent } from '@/utils/helpers';
+import { asyncHandler } from '@/middleware/error.middleware';
 
 export class AuthController {
   private authService: AuthService;
@@ -9,82 +11,74 @@ export class AuthController {
     this.authService = new AuthService();
   }
 
-  register = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { name, email, password, role } = req.body;
-      
-      const result = await this.authService.register({
-        name,
-        email,
-        password,
-        role
-      });
+  register = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { name, email, password, role } = req.body;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
-      res.status(201).json(
-        createApiResponse(true, 'User registered successfully', result)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
+    const result = await this.authService.register(
+      { name, email, password, role },
+      ipAddress,
+      userAgent
+    );
 
-  login = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { email, password } = req.body;
-      
-      const result = await this.authService.login(email, password);
+    res.status(201).json(
+      createApiResponse(true, 'User registered successfully', result)
+    );
+  });
 
-      res.status(200).json(
-        createApiResponse(true, 'Login successful', result)
-      );
-    } catch (error) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(
-          createApiResponse(false, error.message)
-        );
-      } else {
-        res.status(500).json(
-          createApiResponse(false, 'Internal server error')
-        );
-      }
-    }
-  };
+  login = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { email, password } = req.body;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
 
-  getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const user = req.user!;
-      
-      res.status(200).json(
-        createApiResponse(true, 'Profile retrieved successfully', { user })
-      );
-    } catch (error) {
-      res.status(500).json(
-        createApiResponse(false, 'Internal server error')
-      );
-    }
-  };
+    const result = await this.authService.login(email, password, ipAddress, userAgent);
 
-  refreshToken = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const user = req.user!;
-      
-      const token = generateToken({ userId: user.id, role: user.role });
-      
-      res.status(200).json(
-        createApiResponse(true, 'Token refreshed successfully', { token })
-      );
-    } catch (error) {
-      res.status(500).json(
-        createApiResponse(false, 'Internal server error')
-      );
-    }
-  };
+    res.json(
+      createApiResponse(true, 'Login successful', result)
+    );
+  });
+
+  getProfile = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    res.json(
+      createApiResponse(true, 'Profile retrieved successfully', req.user)
+    );
+  });
+
+  updatePassword = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { currentPassword, newPassword } = req.body;
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    await this.authService.updatePassword(
+      req.user!.id,
+      currentPassword,
+      newPassword,
+      ipAddress,
+      userAgent
+    );
+
+    res.json(
+      createApiResponse(true, 'Password updated successfully')
+    );
+  });
+
+  verifyEmail = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    await this.authService.verifyEmail(req.user!.id);
+
+    res.json(
+      createApiResponse(true, 'Email verified successfully')
+    );
+  });
+
+  logout = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const ipAddress = getClientIp(req);
+    const userAgent = getUserAgent(req);
+
+    await this.authService.logout(req.user!.id, ipAddress, userAgent);
+
+    res.json(
+      createApiResponse(true, 'Logout successful')
+    );
+  });
 }

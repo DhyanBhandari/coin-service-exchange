@@ -6,7 +6,8 @@ export const validateBody = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { error, value } = schema.validate(req.body, {
       abortEarly: false,
-      stripUnknown: true
+      stripUnknown: true,
+      allowUnknown: false
     });
 
     if (error) {
@@ -29,7 +30,8 @@ export const validateQuery = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { error, value } = schema.validate(req.query, {
       abortEarly: false,
-      stripUnknown: true
+      stripUnknown: true,
+      allowUnknown: false
     });
 
     if (error) {
@@ -67,6 +69,41 @@ export const validateParams = (schema: Joi.ObjectSchema) => {
     }
 
     req.params = value;
+    next();
+  };
+};
+
+export const validateFile = (options: {
+  required?: boolean;
+  maxSize?: number;
+  allowedTypes?: string[];
+}) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const file = req.file;
+    
+    if (options.required && !file) {
+      res.status(400).json(
+        createApiResponse(false, 'File is required')
+      );
+      return;
+    }
+
+    if (file) {
+      if (options.maxSize && file.size > options.maxSize) {
+        res.status(400).json(
+          createApiResponse(false, `File size must be less than ${options.maxSize} bytes`)
+        );
+        return;
+      }
+
+      if (options.allowedTypes && !options.allowedTypes.includes(file.mimetype)) {
+        res.status(400).json(
+          createApiResponse(false, `File type must be one of: ${options.allowedTypes.join(', ')}`)
+        );
+        return;
+      }
+    }
+
     next();
   };
 };

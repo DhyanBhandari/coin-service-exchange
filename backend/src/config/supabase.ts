@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/utils/logger';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -20,3 +21,16 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
     persistSession: false
   }
 });
+
+// Test Supabase connection
+export const testSupabaseConnection = async () => {
+  try {
+    const { data, error } = await supabase.from('users').select('count').limit(1);
+    if (error) throw error;
+    logger.info('Supabase connected successfully');
+    return true;
+  } catch (error) {
+    logger.error('Supabase connection failed:', error);
+    return false;
+  }
+};
