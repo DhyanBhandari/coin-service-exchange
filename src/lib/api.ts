@@ -35,7 +35,7 @@ class ApiService {
   private token: string | null;
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+    this.baseURL = import.meta.env.VITE_API_URL || 'https://coin-service-exchange-backend.bolt.run/api/v1';
     this.token = localStorage.getItem('token');
   }
 

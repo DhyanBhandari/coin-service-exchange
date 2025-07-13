@@ -215,9 +215,9 @@ const ApiTestComponent = () => {
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
           <h4 className="font-medium text-blue-900 mb-2">Test Configuration</h4>
           <div className="text-sm text-blue-800 space-y-1">
-            <p><strong>API URL:</strong> {import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}</p>
+            <p><strong>API URL:</strong> {import.meta.env.VITE_API_URL || 'https://coin-service-exchange-backend.bolt.run/api/v1'}</p>
             <p><strong>Environment:</strong> {import.meta.env.MODE}</p>
-            <p><strong>Health URL:</strong> {import.meta.env.VITE_API_URL?.replace('/api/v1', '/health') || 'http://localhost:5000/health'}</p>
+            <p><strong>Health URL:</strong> {import.meta.env.VITE_API_URL?.replace('/api/v1', '/health') || 'https://coin-service-exchange-backend.bolt.run/health'}</p>
           </div>
         </div>
 

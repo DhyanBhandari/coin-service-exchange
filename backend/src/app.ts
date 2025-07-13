@@ -44,6 +44,7 @@ app.use(helmet({
 // Enhanced CORS configuration for frontend integration
 app.use(cors({
     origin: [
+        'https://coin-service-exchange-frontend.bolt.run',
         'http://localhost:8080',  // Vite dev server
         'http://localhost:3000',  // React dev server
         'http://localhost:5173',  // Alternative Vite port
