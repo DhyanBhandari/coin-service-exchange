@@ -2,7 +2,7 @@ import Joi from 'joi';
 import { SERVICE_CATEGORIES, USER_ROLES } from './constants';
 
 export const validationSchemas = {
-  # Auth schemas
+  // Auth schemas
   register: Joi.object({
     name: Joi.string().min(2).max(100).required(),
     email: Joi.string().email().required(),
@@ -23,7 +23,7 @@ export const validationSchemas = {
     newPassword: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]')).required()
   }),
 
-  # User schemas
+  // User schemas
   updateProfile: Joi.object({
     name: Joi.string().min(2).max(100).optional(),
     phone: Joi.string().pattern(/^[+]?[1-9]\\d{1,14}$/).optional(),
@@ -42,7 +42,7 @@ export const validationSchemas = {
     profileImage: Joi.string().uri().optional()
   }),
 
-  # Service schemas
+  // Service schemas
   createService: Joi.object({
     title: Joi.string().min(5).max(200).required(),
     description: Joi.string().min(20).max(2000).required(),
@@ -70,7 +70,7 @@ export const validationSchemas = {
     review: Joi.string().min(10).max(1000).optional()
   }),
 
-  # Payment schemas
+  // Payment schemas
   createPaymentOrder: Joi.object({
     amount: Joi.number().min(10).max(1000000).required(),
     purpose: Joi.string().valid('coin_purchase', 'service_booking').optional()
@@ -88,7 +88,7 @@ export const validationSchemas = {
     reason: Joi.string().max(500).optional()
   }),
 
-  # Conversion schemas
+  // Conversion schemas
   createConversionRequest: Joi.object({
     amount: Joi.number().min(50).max(100000).required(),
     bankDetails: Joi.object({
@@ -108,7 +108,7 @@ export const validationSchemas = {
     reason: Joi.string().min(10).max(500).required()
   }),
 
-  # Query parameter schemas
+  // Query parameter schemas
   paginationQuery: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
@@ -150,12 +150,12 @@ export const validationSchemas = {
     endDate: Joi.date().iso().optional()
   }),
 
-  # Parameter schemas
+  // Parameter schemas
   uuidParam: Joi.object({
     id: Joi.string().uuid().required()
   }),
 
-  # Admin schemas
+  // Admin schemas
   suspendUser: Joi.object({
     reason: Joi.string().min(10).max(500).required()
   }),
@@ -165,7 +165,7 @@ export const validationSchemas = {
   })
 };
 
-# Custom validation functions
+// Custom validation functions
 export const validateUUID = (id: string): boolean => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(id);
