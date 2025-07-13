@@ -1,3 +1,4 @@
+// src/components/EnhancedPaymentModal.tsx - Updated with real API integration
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -16,9 +17,11 @@ import {
   Check,
   X,
   Shield,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiService } from '@/lib/api';
 
 declare global {
   interface Window {
@@ -82,16 +85,9 @@ const EnhancedPaymentModal = ({
 
   const loadSavedPaymentMethods = async () => {
     try {
-      const response = await fetch('/api/payments/methods', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setSavedMethods(data.data || []);
-      }
+      // For now, we'll use empty array since payment methods API is not implemented
+      // You can implement this later when payment methods storage is added
+      setSavedMethods([]);
     } catch (error) {
       console.error('Failed to load payment methods:', error);
     }
@@ -110,31 +106,22 @@ const EnhancedPaymentModal = ({
     setIsLoading(true);
 
     try {
-      // Create Razorpay order
-      const orderResponse = await fetch('/api/payments/create-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          amount,
-          currency: 'INR',
-          purpose
-        })
+      // Create payment order through our API
+      const orderResponse = await apiService.createPaymentOrder({
+        amount,
+        purpose
       });
 
-      if (!orderResponse.ok) {
-        throw new Error('Failed to create payment order');
+      if (!orderResponse.success) {
+        throw new Error(orderResponse.message || 'Failed to create payment order');
       }
 
-      const orderData = await orderResponse.json();
-      const order = orderData.data;
+      const order = orderResponse.data;
 
       // Configure Razorpay options
       const options = {
         key: order.keyId,
-        amount: order.amount,
+        amount: order.amount * 100, // Convert to paise
         currency: order.currency,
         name: 'ErthaExchange',
         description: purpose === 'coin_purchase' ? 'Add ErthaCoins' : 'Service Payment',
@@ -160,18 +147,23 @@ const EnhancedPaymentModal = ({
           }
         },
         handler: async (response: any) => {
-          await verifyPayment(response, order.paymentTransactionId);
+          await verifyPayment(response, order);
         }
       };
+
+      if (!window.Razorpay) {
+        throw new Error('Razorpay not loaded. Please refresh and try again.');
+      }
 
       const rzp = new window.Razorpay(options);
       rzp.open();
 
-    } catch (error) {
+    } catch (error: any) {
       setIsLoading(false);
+      console.error('Payment initiation error:', error);
       toast({
         title: "Payment Failed",
-        description: "Failed to initiate payment. Please try again.",
+        description: error.message || "Failed to initiate payment. Please try again.",
         variant: "destructive",
       });
     }
@@ -196,41 +188,31 @@ const EnhancedPaymentModal = ({
     return methods;
   };
 
-  const verifyPayment = async (response: any, paymentTransactionId: string) => {
+  const verifyPayment = async (response: any, order: any) => {
     try {
-      const verifyResponse = await fetch('/api/payments/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-          amount,
-          purpose
-        })
+      const verifyResponse = await apiService.verifyPayment({
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature
       });
 
-      const verifyData = await verifyResponse.json();
-
-      if (verifyData.success) {
+      if (verifyResponse.success) {
         toast({
           title: "Payment Successful!",
           description: purpose === 'coin_purchase' 
             ? `₹${amount} converted to ${amount} ErthaCoins`
             : "Service payment completed successfully",
         });
-        onSuccess(verifyData.data);
+        onSuccess(verifyResponse.data);
         onClose();
       } else {
-        throw new Error('Payment verification failed');
+        throw new Error(verifyResponse.message || 'Payment verification failed');
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Payment verification error:', error);
       toast({
         title: "Payment Verification Failed",
-        description: "Please contact support if amount was deducted.",
+        description: error.message || "Please contact support if amount was deducted.",
         variant: "destructive",
       });
     } finally {
@@ -447,7 +429,7 @@ const EnhancedPaymentModal = ({
 
           {/* Action Buttons */}
           <div className="flex space-x-3">
-            <Button variant="outline" onClick={onClose} className="flex-1">
+            <Button variant="outline" onClick={onClose} className="flex-1" disabled={isLoading}>
               Cancel
             </Button>
             <Button 
@@ -456,7 +438,10 @@ const EnhancedPaymentModal = ({
               className="flex-1 flex items-center gap-2"
             >
               {isLoading ? (
-                "Processing..."
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing...
+                </>
               ) : (
                 <>
                   <Zap className="h-4 w-4" />

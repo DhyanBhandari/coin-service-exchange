@@ -1,3 +1,4 @@
+// backend/src/app.ts - Updated CORS configuration
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -40,13 +41,22 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// CORS configuration
+// Enhanced CORS configuration for frontend integration
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+        'http://localhost:8080',  // Vite dev server
+        'http://localhost:3000',  // React dev server
+        'http://localhost:5173',  // Alternative Vite port
+        process.env.FRONTEND_URL || 'http://localhost:8080'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    exposedHeaders: ['X-Total-Count', 'X-Page-Count']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Rate limiting
 const limiter = rateLimit({

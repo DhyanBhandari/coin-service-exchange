@@ -1,4 +1,4 @@
-
+// src/pages/Signup.tsx - Fixed with proper error handling
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Coins, User, Building2, Eye, EyeOff } from "lucide-react";
+import { Coins, User, Building2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiService } from "@/lib/api";
 
 const Signup = () => {
   const [name, setName] = useState("");
@@ -39,30 +40,68 @@ const Signup = () => {
       return;
     }
 
+    if (password.length < 8) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 8 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      // Store user info in localStorage for demo
-      localStorage.setItem('user', JSON.stringify({
+    try {
+      console.log('Attempting registration with:', { name, email, role, password: '***' });
+      
+      const response = await apiService.register({
         name,
         email,
-        role,
-        id: Math.random().toString(36).substr(2, 9),
-        walletBalance: role === 'user' ? 0 : undefined
-      }));
-
-      toast({
-        title: "Account Created!",
-        description: `Welcome to ErthaExchange! Redirecting to your dashboard.`,
+        password,
+        role
       });
 
-      // Redirect based on role
-      const dashboardPath = role === 'user' ? '/dashboard/user' : 
-                           role === 'org' ? '/dashboard/org' : '/dashboard/admin';
-      navigate(dashboardPath);
+      console.log('Registration response:', response);
+
+      if (response.success && response.data) {
+        const user = response.data.user;
+        
+        toast({
+          title: "Account Created!",
+          description: `Welcome to ErthaExchange, ${user.name}!`,
+        });
+
+        // Navigate to appropriate dashboard based on role
+        let dashboardPath = '/dashboard/user';
+        if (user.role === 'admin') {
+          dashboardPath = '/dashboard/admin';
+        } else if (user.role === 'org') {
+          dashboardPath = '/dashboard/org';
+        }
+
+        navigate(dashboardPath);
+      } else {
+        throw new Error(response.message || 'Registration failed');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      
+      let errorMessage = "Please try again with different details.";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+
+      toast({
+        title: "Registration Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -93,6 +132,7 @@ const Signup = () => {
                   placeholder="Enter your full name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  disabled={isLoading}
                   required
                 />
               </div>
@@ -105,6 +145,7 @@ const Signup = () => {
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                   required
                 />
               </div>
@@ -118,6 +159,7 @@ const Signup = () => {
                     placeholder="Create a password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
                     required
                   />
                   <Button
@@ -126,6 +168,7 @@ const Signup = () => {
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
+                    disabled={isLoading}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 text-gray-400" />
@@ -144,6 +187,7 @@ const Signup = () => {
                   placeholder="Confirm your password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isLoading}
                   required
                 />
               </div>
@@ -156,6 +200,7 @@ const Signup = () => {
                     variant={role === 'user' ? 'default' : 'outline'}
                     className="flex-1"
                     onClick={() => setRole('user')}
+                    disabled={isLoading}
                   >
                     <User className="h-4 w-4 mr-2" />
                     User
@@ -165,6 +210,7 @@ const Signup = () => {
                     variant={role === 'org' ? 'default' : 'outline'}
                     className="flex-1"
                     onClick={() => setRole('org')}
+                    disabled={isLoading}
                   >
                     <Building2 className="h-4 w-4 mr-2" />
                     Organization
@@ -190,7 +236,14 @@ const Signup = () => {
                 className="w-full" 
                 disabled={isLoading}
               >
-                {isLoading ? "Creating Account..." : "Create Account"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Account...
+                  </>
+                ) : (
+                  "Create Account"
+                )}
               </Button>
             </form>
 
