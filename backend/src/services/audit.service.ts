@@ -1,30 +1,36 @@
-import { db } from '@/config/database';
-import { auditLogs } from '@/models/schema';
-import { NewAuditLog, AuditLog } from '@/models/schema';
+// Fixed audit.service.ts
+import { getDb } from '../config/database';
+import { auditLogs } from '../models/schema';
+import { NewAuditLog, AuditLog } from '../models/schema';
 import { eq, desc, and, gte, lte } from 'drizzle-orm';
-import { AuditLogData, PaginationParams, PaginatedResponse } from '@/types';
-import { calculatePagination } from '@/utils/helpers';
-import { logger } from '@/utils/logger';
+import { AuditLogData, PaginationParams, PaginatedResponse } from '../types';
+import { calculatePagination } from '../utils/helpers';
+import { logger } from '../utils/logger';
 
 export class AuditService {
   async log(data: AuditLogData): Promise<AuditLog> {
     try {
+      const db = getDb();
       const auditData: NewAuditLog = {
-        userId: data.userId,
+        userId: data.userId ?? null,
         action: data.action,
         resource: data.resource,
-        resourceId: data.resourceId,
+        resourceId: data.resourceId ?? null,
         oldValues: data.oldValues,
         newValues: data.newValues,
-        ipAddress: data.ipAddress,
-        userAgent: data.userAgent,
-        metadata: data.metadata
+        ipAddress: data.ipAddress ?? null,
+        userAgent: data.userAgent ?? null,
+        metadata: data.metadata ?? null
       };
 
       const [newAuditLog] = await db
         .insert(auditLogs)
         .values(auditData)
         .returning();
+
+      if (!newAuditLog) {
+        throw new Error('Failed to create audit log');
+      }
 
       return newAuditLog;
     } catch (error) {
@@ -44,9 +50,8 @@ export class AuditService {
     pagination: PaginationParams
   ): Promise<PaginatedResponse<AuditLog>> {
     try {
-      let query = db.select().from(auditLogs);
-
-      # Apply filters
+      const db = getDb();
+      // Apply filters
       const conditions = [];
 
       if (filters.userId) {
@@ -69,20 +74,20 @@ export class AuditService {
         conditions.push(lte(auditLogs.createdAt, new Date(filters.endDate)));
       }
 
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-      }
-
-      # Get total count
-      const totalQuery = conditions.length > 0 
+      // Get total count
+      const totalQuery = conditions.length > 0
         ? db.select().from(auditLogs).where(and(...conditions))
         : db.select().from(auditLogs);
-      
+
       const total = (await totalQuery).length;
 
-      # Apply pagination
+      // Apply pagination
       const offset = (pagination.page - 1) * pagination.limit;
-      const data = await query
+      const dataQuery = conditions.length > 0
+        ? db.select().from(auditLogs).where(and(...conditions))
+        : db.select().from(auditLogs);
+
+      const data = await dataQuery
         .orderBy(desc(auditLogs.createdAt))
         .limit(pagination.limit)
         .offset(offset);
@@ -99,6 +104,7 @@ export class AuditService {
 
   async getAuditLogById(id: string): Promise<AuditLog | null> {
     try {
+      const db = getDb();
       const [auditLog] = await db
         .select()
         .from(auditLogs)
@@ -114,6 +120,7 @@ export class AuditService {
 
   async getActivitySummary(userId: string, days: number = 30): Promise<any> {
     try {
+      const db = getDb();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 

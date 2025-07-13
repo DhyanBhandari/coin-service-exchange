@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '@/types';
-import { ConversionService } from '@/services/conversion.service';
-import { createApiResponse, validatePaginationParams } from '@/utils/helpers';
-import { asyncHandler } from '@/middleware/error.middleware';
+import { AuthRequest } from '../types';
+import { ConversionService } from '../services/conversion.service';
+import { createApiResponse, validatePaginationParams } from '../utils/helpers';
+import { asyncHandler } from '../middleware/error.middleware';
 
 export class ConversionController {
   private conversionService: ConversionService;
@@ -11,7 +11,7 @@ export class ConversionController {
     this.conversionService = new ConversionService();
   }
 
-  createRequest = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  createRequest = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { amount, bankDetails } = req.body;
 
     const request = await this.conversionService.createConversionRequest(
@@ -25,8 +25,8 @@ export class ConversionController {
     );
   });
 
-  getRequests = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const pagination = validatePaginationParams(req.query.page, req.query.limit);
+  getRequests = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
     const organizationId = req.user!.role === 'org' ? req.user!.id : undefined;
 
     const result = await this.conversionService.getConversionRequests(pagination, organizationId);
@@ -36,14 +36,22 @@ export class ConversionController {
     );
   });
 
-  getRequestById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getRequestById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Request ID is required')
+      );
+      return;
+    }
 
     const request = await this.conversionService.getConversionRequestById(id);
     if (!request) {
-      return res.status(404).json(
+      res.status(404).json(
         createApiResponse(false, 'Conversion request not found')
       );
+      return;
     }
 
     res.json(
@@ -51,9 +59,16 @@ export class ConversionController {
     );
   });
 
-  approveRequest = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  approveRequest = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const { transactionId } = req.body;
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Request ID is required')
+      );
+      return;
+    }
 
     const request = await this.conversionService.approveConversionRequest(
       id,
@@ -66,9 +81,16 @@ export class ConversionController {
     );
   });
 
-  rejectRequest = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  rejectRequest = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const { reason } = req.body;
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Request ID is required')
+      );
+      return;
+    }
 
     const request = await this.conversionService.rejectConversionRequest(
       id,

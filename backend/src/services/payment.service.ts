@@ -1,15 +1,15 @@
-import { db } from '@/config/database';
-import { paymentTransactions, transactions, users } from '@/models/schema';
+import { getDb } from '../config/database';
+import { paymentTransactions, transactions, users } from '../models/schema';
 import { eq } from 'drizzle-orm';
-import { PaymentTransaction, NewPaymentTransaction } from '@/models/schema';
-import { razorpay, razorpayConfig } from '@/config/razorpay';
-import { createError, generateOrderId } from '@/utils/helpers';
-import { PAYMENT_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '@/utils/constants';
-import { PaymentOrderData, PaymentVerificationData } from '@/types';
+import { PaymentTransaction, NewPaymentTransaction } from '../models/schema';
+import { razorpay, razorpayConfig } from '../config/razorpay';
+import { createError, generateOrderId } from '../utils/helpers';
+import { PAYMENT_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '../utils/constants';
+import { PaymentOrderData, PaymentVerificationData } from '../types';
 import { TransactionService } from './transaction.service';
 import { UserService } from './user.service';
 import { AuditService } from './audit.service';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 import crypto from 'crypto';
 
 export class PaymentService {
@@ -29,7 +29,9 @@ export class PaymentService {
     purpose: string = 'coin_purchase'
   ): Promise<PaymentOrderData> {
     try {
-      # Validate amount
+      const db = getDb();
+      
+      // Validate amount
       if (amount < razorpayConfig.minAmount || amount > razorpayConfig.maxAmount) {
         throw createError(
           `Amount must be between ${razorpayConfig.minAmount} and ${razorpayConfig.maxAmount}`,
@@ -37,10 +39,10 @@ export class PaymentService {
         );
       }
 
-      # Create Razorpay order
+      // Create Razorpay order
       const receipt = generateOrderId();
       const razorpayOrder = await razorpay.orders.create({
-        amount: amount * 100, # Razorpay expects amount in paise
+        amount: amount * 100, // Razorpay expects amount in paise
         currency: razorpayConfig.currency,
         receipt,
         notes: {
@@ -49,7 +51,7 @@ export class PaymentService {
         }
       });
 
-      # Create payment transaction record
+      // Create payment transaction record
       const paymentTransaction: NewPaymentTransaction = {
         userId,
         razorpayOrderId: razorpayOrder.id,
@@ -90,9 +92,10 @@ export class PaymentService {
     userId: string
   ): Promise<PaymentTransaction> {
     try {
+      const db = getDb();
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = verificationData;
 
-      # Verify signature
+      // Verify signature
       const isSignatureValid = this.verifyRazorpaySignature(
         razorpay_order_id,
         razorpay_payment_id,
@@ -103,7 +106,7 @@ export class PaymentService {
         throw createError('Invalid payment signature', 400);
       }
 
-      # Get payment transaction
+      // Get payment transaction
       const [paymentTransaction] = await db
         .select()
         .from(paymentTransactions)
@@ -118,7 +121,7 @@ export class PaymentService {
         throw createError('Unauthorized payment verification', 403);
       }
 
-      # Update payment transaction
+      // Update payment transaction
       const [updatedPaymentTransaction] = await db
         .update(paymentTransactions)
         .set({
@@ -130,7 +133,7 @@ export class PaymentService {
         .where(eq(paymentTransactions.id, paymentTransaction.id))
         .returning();
 
-      # Create transaction record
+      // Create transaction record
       const amount = parseFloat(paymentTransaction.amount);
       await this.transactionService.createTransaction({
         userId,
@@ -146,10 +149,10 @@ export class PaymentService {
         }
       });
 
-      # Update user wallet balance
+      // Update user wallet balance
       await this.userService.updateWalletBalance(userId, amount.toString(), 'add');
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId,
         action: 'payment_completed',
@@ -172,6 +175,8 @@ export class PaymentService {
     reason: string
   ): Promise<void> {
     try {
+      const db = getDb();
+      
       const [paymentTransaction] = await db
         .select()
         .from(paymentTransactions)
@@ -191,7 +196,7 @@ export class PaymentService {
         })
         .where(eq(paymentTransactions.id, paymentTransaction.id));
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: paymentTransaction.userId,
         action: 'payment_failed',
@@ -232,6 +237,8 @@ export class PaymentService {
     adminId?: string
   ): Promise<PaymentTransaction> {
     try {
+      const db = getDb();
+      
       const [paymentTransaction] = await db
         .select()
         .from(paymentTransactions)
@@ -244,16 +251,16 @@ export class PaymentService {
 
       const refundAmount = amount || parseFloat(paymentTransaction.amount);
       
-      # Create refund with Razorpay
+      // Create refund with Razorpay
       const refund = await razorpay.payments.refund(paymentId, {
-        amount: refundAmount * 100, # Convert to paise
+        amount: refundAmount * 100, // Convert to paise
         notes: {
           reason: 'Customer requested refund',
           processedBy: adminId || 'system'
         }
       });
 
-      # Update payment transaction
+      // Update payment transaction
       const [updatedTransaction] = await db
         .update(paymentTransactions)
         .set({
@@ -265,14 +272,14 @@ export class PaymentService {
         .where(eq(paymentTransactions.id, paymentTransaction.id))
         .returning();
 
-      # Deduct amount from user wallet
+      // Deduct amount from user wallet
       await this.userService.updateWalletBalance(
         paymentTransaction.userId,
         refundAmount.toString(),
         'subtract'
       );
 
-      # Create refund transaction record
+      // Create refund transaction record
       await this.transactionService.createTransaction({
         userId: paymentTransaction.userId,
         type: TRANSACTION_TYPES.REFUND,

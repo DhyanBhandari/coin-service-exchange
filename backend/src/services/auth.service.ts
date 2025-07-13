@@ -1,5 +1,5 @@
-import { db } from '@/config/database';
-import { users } from '@/models/schema';
+import { getDb } from '../config/database';
+import { users } from '../models/schema';
 import { eq } from 'drizzle-orm';
 import {
   hashPassword,
@@ -7,11 +7,11 @@ import {
   generateToken,
   sanitizeUser,
   createError
-} from '@/utils/helpers';
-import { User, NewUser } from '@/models/schema';
-import { USER_ROLES, USER_STATUS } from '@/utils/constants';
+} from '../utils/helpers';
+import { User, NewUser } from '../models/schema';
+import { USER_ROLES, USER_STATUS } from '../utils/constants';
 import { AuditService } from './audit.service';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class AuthService {
   private auditService: AuditService;
@@ -27,7 +27,9 @@ export class AuthService {
     role?: string;
   }, ipAddress?: string, userAgent?: string): Promise<{ user: User; token: string }> {
     try {
-      # Check if user already exists
+      const db = getDb();
+
+      // Check if user already exists
       const existingUser = await db
         .select()
         .from(users)
@@ -38,10 +40,10 @@ export class AuthService {
         throw createError('User already exists with this email', 409);
       }
 
-      # Hash password
+      // Hash password
       const hashedPassword = await hashPassword(userData.password);
 
-      # Create user
+      // Create user
       const newUserData: NewUser = {
         name: userData.name,
         email: userData.email,
@@ -57,22 +59,26 @@ export class AuthService {
         .values(newUserData)
         .returning();
 
-      # Generate token
-      const token = generateToken({ 
-        userId: newUser.id, 
+      if (!newUser) {
+        throw createError('Failed to create user', 500);
+      }
+
+      // Generate token
+      const token = generateToken({
+        userId: newUser.id,
         role: newUser.role,
-        email: newUser.email 
+        email: newUser.email
       });
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: newUser.id,
         action: 'register',
         resource: 'user',
         resourceId: newUser.id,
         newValues: sanitizeUser(newUser),
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`New user registered: ${newUser.email} (${newUser.role})`);
@@ -88,13 +94,15 @@ export class AuthService {
   }
 
   async login(
-    email: string, 
+    email: string,
     password: string,
     ipAddress?: string,
     userAgent?: string
   ): Promise<{ user: User; token: string }> {
     try {
-      # Find user
+      const db = getDb();
+
+      // Find user
       const [user] = await db
         .select()
         .from(users)
@@ -105,42 +113,43 @@ export class AuthService {
         throw createError('Invalid credentials', 401);
       }
 
-      # Check password
+      // Check password
       const isPasswordValid = await comparePassword(password, user.password);
       if (!isPasswordValid) {
         throw createError('Invalid credentials', 401);
       }
 
-      # Check user status
+      // Check user status
       if (user.status !== USER_STATUS.ACTIVE) {
         throw createError(`Account is ${user.status}`, 403);
       }
 
-      # Update last login
+      // Update last login
       await db
         .update(users)
-        .set({ 
+        .set({
           lastLoginAt: new Date(),
           updatedAt: new Date()
         })
         .where(eq(users.id, user.id));
 
-      # Generate token
-      const token = generateToken({ 
-        userId: user.id, 
+      // Generate token
+      const token = generateToken({
+        userId: user.id,
         role: user.role,
-        email: user.email 
+        metadata: { loginTime: new Date() },
+        ipAddress,
+        userAgent
       });
 
-      # Log audit
       await this.auditService.log({
         userId: user.id,
         action: 'login',
         resource: 'user',
         resourceId: user.id,
         metadata: { loginTime: new Date() },
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`User logged in: ${user.email} (${user.role})`);
@@ -157,6 +166,7 @@ export class AuthService {
 
   async getUserById(id: string): Promise<User | null> {
     try {
+      const db = getDb();
       const [user] = await db
         .select()
         .from(users)
@@ -172,6 +182,7 @@ export class AuthService {
 
   async getUserByEmail(email: string): Promise<User | null> {
     try {
+      const db = getDb();
       const [user] = await db
         .select()
         .from(users)
@@ -193,7 +204,9 @@ export class AuthService {
     userAgent?: string
   ): Promise<void> {
     try {
-      # Get user with password
+      const db = getDb();
+
+      // Get user with password
       const [user] = await db
         .select()
         .from(users)
@@ -204,33 +217,32 @@ export class AuthService {
         throw createError('User not found', 404);
       }
 
-      # Verify current password
+      // Verify current password
       const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
       if (!isCurrentPasswordValid) {
         throw createError('Current password is incorrect', 400);
       }
 
-      # Hash new password
+      // Hash new password
       const hashedNewPassword = await hashPassword(newPassword);
 
-      # Update password
+      // Update password
       await db
         .update(users)
-        .set({ 
+        .set({
           password: hashedNewPassword,
           updatedAt: new Date()
         })
         .where(eq(users.id, userId));
 
-      # Log audit
       await this.auditService.log({
         userId,
         action: 'update_password',
         resource: 'user',
         resourceId: userId,
         metadata: { passwordChanged: true },
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`Password updated for user: ${user.email}`);
@@ -242,15 +254,17 @@ export class AuthService {
 
   async verifyEmail(userId: string): Promise<void> {
     try {
+      const db = getDb();
+
       await db
         .update(users)
-        .set({ 
+        .set({
           emailVerified: true,
           updatedAt: new Date()
         })
         .where(eq(users.id, userId));
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId,
         action: 'verify_email',
@@ -272,15 +286,14 @@ export class AuthService {
     userAgent?: string
   ): Promise<void> {
     try {
-      # Log audit
       await this.auditService.log({
         userId,
         action: 'logout',
         resource: 'user',
         resourceId: userId,
         metadata: { logoutTime: new Date() },
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`User logged out: ${userId}`);

@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '@/types';
-import { ServiceService } from '@/services/service.service';
-import { createApiResponse, getClientIp, getUserAgent, validatePaginationParams } from '@/utils/helpers';
-import { asyncHandler } from '@/middleware/error.middleware';
+import { AuthRequest } from '../types';
+import { ServiceService } from '../services/service.service';
+import { createApiResponse, getClientIp, getUserAgent, validatePaginationParams } from '../utils/helpers';
+import { asyncHandler } from '../middleware/error.middleware';
 
 export class ServiceController {
   private serviceService: ServiceService;
@@ -11,7 +11,7 @@ export class ServiceController {
     this.serviceService = new ServiceService();
   }
 
-  createService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  createService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const serviceData = req.body;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
@@ -28,16 +28,18 @@ export class ServiceController {
     );
   });
 
-  getServices = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const pagination = validatePaginationParams(req.query.page, req.query.limit);
-    const filters = {
-      category: req.query.category as string,
-      search: req.query.search as string,
-      minPrice: req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined,
-      maxPrice: req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : undefined,
-      status: req.query.status as string,
-      organizationId: req.query.organizationId as string
-    };
+  getServices = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
+    
+    // Create filters object with proper type handling
+    const filters: any = {};
+    
+    if (req.query.category) filters.category = req.query.category as string;
+    if (req.query.search) filters.search = req.query.search as string;
+    if (req.query.minPrice) filters.minPrice = parseFloat(req.query.minPrice as string);
+    if (req.query.maxPrice) filters.maxPrice = parseFloat(req.query.maxPrice as string);
+    if (req.query.status) filters.status = req.query.status as string;
+    if (req.query.organizationId) filters.organizationId = req.query.organizationId as string;
 
     const result = await this.serviceService.getServices(filters, pagination);
 
@@ -46,14 +48,22 @@ export class ServiceController {
     );
   });
 
-  getServiceById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getServiceById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Service ID is required')
+      );
+      return;
+    }
 
     const service = await this.serviceService.getServiceById(id);
     if (!service) {
-      return res.status(404).json(
+      res.status(404).json(
         createApiResponse(false, 'Service not found')
       );
+      return;
     }
 
     res.json(
@@ -61,11 +71,18 @@ export class ServiceController {
     );
   });
 
-  updateService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  updateService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const updateData = req.body;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Service ID is required')
+      );
+      return;
+    }
 
     const updatedService = await this.serviceService.updateService(
       id,
@@ -80,10 +97,17 @@ export class ServiceController {
     );
   });
 
-  deleteService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  deleteService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Service ID is required')
+      );
+      return;
+    }
 
     await this.serviceService.deleteService(id, req.user!.id, ipAddress, userAgent);
 
@@ -92,9 +116,16 @@ export class ServiceController {
     );
   });
 
-  addReview = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  addReview = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const { rating, review } = req.body;
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Service ID is required')
+      );
+      return;
+    }
 
     const newReview = await this.serviceService.addReview(id, req.user!.id, rating, review);
 
@@ -103,28 +134,37 @@ export class ServiceController {
     );
   });
 
-  bookService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  bookService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
 
-    # Get service details
-    const service = await this.serviceService.getServiceById(id);
-    if (!service) {
-      return res.status(404).json(
-        createApiResponse(false, 'Service not found')
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Service ID is required')
       );
+      return;
     }
 
-    # Check if user has sufficient balance
+    // Get service details
+    const service = await this.serviceService.getServiceById(id);
+    if (!service) {
+      res.status(404).json(
+        createApiResponse(false, 'Service not found')
+      );
+      return;
+    }
+
+    // Check if user has sufficient balance
     const servicePrice = parseFloat(service.price);
     const userBalance = parseFloat(req.user!.walletBalance);
 
     if (userBalance < servicePrice) {
-      return res.status(400).json(
+      res.status(400).json(
         createApiResponse(false, 'Insufficient wallet balance')
       );
+      return;
     }
 
-    # Process booking (this would involve creating a transaction and updating balances)
+    // Process booking (this would involve creating a transaction and updating balances)
     await this.serviceService.incrementBookings(id);
 
     res.json(

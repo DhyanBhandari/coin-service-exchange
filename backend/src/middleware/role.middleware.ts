@@ -44,13 +44,13 @@ export const checkOwnership = (
     return;
   }
 
-  # Admin can access any resource
+  // Admin can access any resource
   if (req.user.role === USER_ROLES.ADMIN) {
     next();
     return;
   }
 
-  # Check if user is accessing their own resource
+  // Check if user is accessing their own resource
   if (req.user.id === id) {
     next();
     return;

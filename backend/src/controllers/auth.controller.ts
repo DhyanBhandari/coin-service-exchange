@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '@/types';
-import { AuthService } from '@/services/auth.service';
-import { createApiResponse, getClientIp, getUserAgent } from '@/utils/helpers';
-import { asyncHandler } from '@/middleware/error.middleware';
+import { AuthRequest } from '../types';
+import { AuthService } from '../services/auth.service';
+import { createApiResponse, getClientIp, getUserAgent } from '../utils/helpers';
+import { asyncHandler } from '../middleware/error.middleware';
 
 export class AuthController {
   private authService: AuthService;
@@ -11,7 +11,7 @@ export class AuthController {
     this.authService = new AuthService();
   }
 
-  register = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  register = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { name, email, password, role } = req.body;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
@@ -27,7 +27,7 @@ export class AuthController {
     );
   });
 
-  login = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  login = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { email, password } = req.body;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
@@ -39,13 +39,13 @@ export class AuthController {
     );
   });
 
-  getProfile = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getProfile = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     res.json(
       createApiResponse(true, 'Profile retrieved successfully', req.user)
     );
   });
 
-  updatePassword = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  updatePassword = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { currentPassword, newPassword } = req.body;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
@@ -63,7 +63,7 @@ export class AuthController {
     );
   });
 
-  verifyEmail = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  verifyEmail = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     await this.authService.verifyEmail(req.user!.id);
 
     res.json(
@@ -71,7 +71,7 @@ export class AuthController {
     );
   });
 
-  logout = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  logout = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
 

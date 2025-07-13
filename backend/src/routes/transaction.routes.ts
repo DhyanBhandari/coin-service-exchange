@@ -8,7 +8,7 @@ import Joi from 'joi';
 const router = Router();
 const transactionController = new TransactionController();
 
-# Validation schemas
+// Validation schemas
 const transactionIdSchema = Joi.object({
   id: Joi.string().uuid().required()
 });
@@ -24,7 +24,7 @@ const getTransactionsQuerySchema = Joi.object({
   endDate: Joi.date().iso().optional()
 });
 
-# Routes
+// Routes
 router.get('/', authenticateToken, requireAnyRole, validateQuery(getTransactionsQuerySchema), transactionController.getTransactions);
 router.get('/stats', authenticateToken, requireAnyRole, transactionController.getStats);
 router.get('/history', authenticateToken, requireAnyRole, transactionController.getUserTransactionHistory);

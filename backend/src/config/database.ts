@@ -1,9 +1,7 @@
-// src/config/database.ts
-
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from '@/models/schema';
-import { logger } from '@/utils/logger';
+import * as schema from '../models/schema';
+import { logger } from '../utils/logger';
 
 // Make these variables mutable, as they will be assigned later
 let client: postgres.Sql | undefined;
@@ -18,7 +16,6 @@ export function initializeDatabase() {
     }
 
     // Extract only the URL part from the environment variable string
-    // This handles cases where the .env file might include "DATABASE_URL=" prefix
     const connectionString = rawConnectionString.startsWith('DATABASE_URL=')
         ? rawConnectionString.substring('DATABASE_URL='.length)
         : rawConnectionString;
@@ -38,7 +35,7 @@ export function initializeDatabase() {
     }
 }
 
-// Export the db and client accessors (they might be undefined before initialization)
+// Export the db and client accessors
 export const getDb = () => {
     if (!db) {
         throw new Error('Database not initialized. Call initializeDatabase() first.');
@@ -46,7 +43,6 @@ export const getDb = () => {
     return db;
 };
 
-// Export the client accessor if needed for testConnection
 export const getClient = () => {
     if (!client) {
         throw new Error('Database client not initialized. Call initializeDatabase() first.');
@@ -54,11 +50,13 @@ export const getClient = () => {
     return client;
 };
 
+// Export db directly for easier imports
+export { db };
 
-// Modify testConnection to use the initialized client
+// Test connection function
 export const testConnection = async () => {
     try {
-        const currentClient = getClient(); // Get the initialized client
+        const currentClient = getClient();
         await currentClient`SELECT 1`;
         logger.info('Database connected successfully');
         return true;

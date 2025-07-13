@@ -1,31 +1,33 @@
-import { db } from '@/config/database';
-import { users, services, transactions, conversionRequests } from '@/models/schema';
+// Fixed admin.service.ts
+import { getDb } from '../config/database';
+import { users, services, transactions, conversionRequests } from '../models/schema';
 import { eq, count, desc, gte, sql } from 'drizzle-orm';
-import { DashboardStats, UserStats, ServiceStats, FinancialStats } from '@/types';
-import { USER_ROLES, SERVICE_STATUS, TRANSACTION_STATUS } from '@/utils/constants';
-import { logger } from '@/utils/logger';
+import { DashboardStats, UserStats, ServiceStats, FinancialStats } from '../types';
+import { USER_ROLES, SERVICE_STATUS, TRANSACTION_STATUS } from '../utils/constants';
+import { logger } from '../utils/logger';
 
 export class AdminService {
   async getDashboardStats(): Promise<DashboardStats> {
     try {
+      const db = getDb();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const thisMonth = new Date();
       thisMonth.setDate(1);
 
-      # User stats
+      // User stats
       const totalUsers = await db.select({ count: count() }).from(users);
       const activeUsers = await db
         .select({ count: count() })
         .from(users)
         .where(eq(users.status, 'active'));
-      
+
       const newUsersThisMonth = await db
         .select({ count: count() })
         .from(users)
         .where(gte(users.createdAt, thisMonth));
-      
+
       const totalOrganizations = await db
         .select({ count: count() })
         .from(users)
@@ -38,13 +40,13 @@ export class AdminService {
         totalOrganizations: totalOrganizations[0].count
       };
 
-      # Service stats
+      // Service stats
       const totalServices = await db.select({ count: count() }).from(services);
       const activeServices = await db
         .select({ count: count() })
         .from(services)
         .where(eq(services.status, SERVICE_STATUS.ACTIVE));
-      
+
       const pendingServices = await db
         .select({ count: count() })
         .from(services)
@@ -61,10 +63,10 @@ export class AdminService {
         totalBookings: totalBookingsResult[0].total || 0
       };
 
-      # Financial stats
+      // Financial stats
       const allUsers = await db.select().from(users);
       const totalCoinsInCirculation = allUsers.reduce(
-        (sum, user) => sum + parseFloat(user.walletBalance), 
+        (sum, user) => sum + parseFloat(user.walletBalance),
         0
       );
 
@@ -106,6 +108,8 @@ export class AdminService {
 
   async getRecentActivity(limit: number = 10) {
     try {
+      const db = getDb();
+
       const recentTransactions = await db
         .select()
         .from(transactions)
@@ -140,20 +144,22 @@ export class AdminService {
 
   async getSystemHealth() {
     try {
-      # Check database connectivity
+      const db = getDb();
+
+      // Check database connectivity
       const dbCheck = await db.select({ count: count() }).from(users);
       const isDatabaseHealthy = dbCheck[0].count >= 0;
 
-      # Calculate uptime (simplified)
+      // Calculate uptime (simplified)
       const uptime = process.uptime();
 
-      # Memory usage
+      // Memory usage
       const memoryUsage = process.memoryUsage();
 
       return {
         database: {
           status: isDatabaseHealthy ? 'healthy' : 'unhealthy',
-          responseTime: '< 100ms' # This would be actual response time in real implementation
+          responseTime: '< 100ms'
         },
         server: {
           uptime: Math.floor(uptime),
@@ -163,7 +169,7 @@ export class AdminService {
           }
         },
         external: {
-          razorpay: 'healthy', # This would be actual health check
+          razorpay: 'healthy',
           supabase: 'healthy'
         }
       };

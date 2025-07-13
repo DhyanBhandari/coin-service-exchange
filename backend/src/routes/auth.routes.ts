@@ -7,7 +7,7 @@ import Joi from 'joi';
 const router = Router();
 const authController = new AuthController();
 
-# Validation schemas
+// Validation schemas
 const registerSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
   email: Joi.string().email().required(),
@@ -25,7 +25,7 @@ const updatePasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required()
 });
 
-# Routes
+// Routes
 router.post('/register', validateBody(registerSchema), authController.register);
 router.post('/login', validateBody(loginSchema), authController.login);
 router.get('/profile', authenticateToken, authController.getProfile);

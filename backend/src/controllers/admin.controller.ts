@@ -1,11 +1,11 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '@/types';
-import { AdminService } from '@/services/admin.service';
-import { ServiceService } from '@/services/service.service';
-import { UserService } from '@/services/user.service';
-import { AuditService } from '@/services/audit.service';
-import { createApiResponse, validatePaginationParams, getClientIp, getUserAgent } from '@/utils/helpers';
-import { asyncHandler } from '@/middleware/error.middleware';
+import { AuthRequest } from '../types';
+import { AdminService } from '../services/admin.service';
+import { ServiceService } from '../services/service.service';
+import { UserService } from '../services/user.service';
+import { AuditService } from '../services/audit.service';
+import { createApiResponse, validatePaginationParams, getClientIp, getUserAgent } from '../utils/helpers';
+import { asyncHandler } from '../middleware/error.middleware';
 
 export class AdminController {
   private adminService: AdminService;
@@ -20,7 +20,7 @@ export class AdminController {
     this.auditService = new AuditService();
   }
 
-  getDashboard = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getDashboard = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const stats = await this.adminService.getDashboardStats();
 
     res.json(
@@ -28,7 +28,7 @@ export class AdminController {
     );
   });
 
-  getRecentActivity = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getRecentActivity = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const limit = parseInt(req.query.limit as string) || 10;
     const activity = await this.adminService.getRecentActivity(limit);
 
@@ -37,7 +37,7 @@ export class AdminController {
     );
   });
 
-  getSystemHealth = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getSystemHealth = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const health = await this.adminService.getSystemHealth();
 
     res.json(
@@ -45,10 +45,17 @@ export class AdminController {
     );
   });
 
-  approveService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  approveService = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Service ID is required')
+      );
+      return;
+    }
 
     const service = await this.serviceService.approveService(id, req.user!.id, ipAddress, userAgent);
 
@@ -57,11 +64,18 @@ export class AdminController {
     );
   });
 
-  suspendUser = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  suspendUser = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const { reason } = req.body;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'User ID is required')
+      );
+      return;
+    }
 
     const user = await this.userService.suspendUser(id, req.user!.id, reason, ipAddress, userAgent);
 
@@ -70,10 +84,17 @@ export class AdminController {
     );
   });
 
-  reactivateUser = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  reactivateUser = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const ipAddress = getClientIp(req);
     const userAgent = getUserAgent(req);
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'User ID is required')
+      );
+      return;
+    }
 
     const user = await this.userService.reactivateUser(id, req.user!.id, ipAddress, userAgent);
 
@@ -82,15 +103,17 @@ export class AdminController {
     );
   });
 
-  getAuditLogs = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const pagination = validatePaginationParams(req.query.page, req.query.limit);
-    const filters = {
-      userId: req.query.userId as string,
-      action: req.query.action as string,
-      resource: req.query.resource as string,
-      startDate: req.query.startDate as string,
-      endDate: req.query.endDate as string
-    };
+  getAuditLogs = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
+    
+    // Create filters object with proper type handling
+    const filters: any = {};
+    
+    if (req.query.userId) filters.userId = req.query.userId as string;
+    if (req.query.action) filters.action = req.query.action as string;
+    if (req.query.resource) filters.resource = req.query.resource as string;
+    if (req.query.startDate) filters.startDate = req.query.startDate as string;
+    if (req.query.endDate) filters.endDate = req.query.endDate as string;
 
     const result = await this.auditService.getAuditLogs(filters, pagination);
 

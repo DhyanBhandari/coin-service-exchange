@@ -1,11 +1,11 @@
-import { db } from '@/config/database';
-import { users } from '@/models/schema';
+import { getDb } from '../config/database';
+import { users } from '../models/schema';
 import { eq } from 'drizzle-orm';
-import { User, NewUser } from '@/models/schema';
-import { sanitizeUser, createError } from '@/utils/helpers';
-import { USER_STATUS } from '@/utils/constants';
+import { User } from '../models/schema';
+import { sanitizeUser, createError } from '../utils/helpers';
+import { USER_STATUS } from '../utils/constants';
 import { AuditService } from './audit.service';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class UserService {
   private auditService: AuditService;
@@ -21,6 +21,8 @@ export class UserService {
     userAgent?: string
   ): Promise<User> {
     try {
+      const db = getDb();
+
       const [existingUser] = await db
         .select()
         .from(users)
@@ -40,7 +42,7 @@ export class UserService {
         .where(eq(users.id, userId))
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId,
         action: 'update',
@@ -48,8 +50,8 @@ export class UserService {
         resourceId: userId,
         oldValues: sanitizeUser(existingUser),
         newValues: sanitizeUser(updatedUser),
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`User profile updated: ${userId}`);
@@ -66,6 +68,8 @@ export class UserService {
     operation: 'add' | 'subtract' = 'add'
   ): Promise<User> {
     try {
+      const db = getDb();
+
       const [user] = await db
         .select()
         .from(users)
@@ -78,7 +82,7 @@ export class UserService {
 
       const currentBalance = parseFloat(user.walletBalance);
       const changeAmount = parseFloat(amount);
-      
+
       let newBalance: number;
       if (operation === 'add') {
         newBalance = currentBalance + changeAmount;
@@ -108,6 +112,8 @@ export class UserService {
 
   async getUserById(id: string): Promise<User | null> {
     try {
+      const db = getDb();
+
       const [user] = await db
         .select()
         .from(users)
@@ -129,6 +135,8 @@ export class UserService {
     userAgent?: string
   ): Promise<User> {
     try {
+      const db = getDb();
+
       const [user] = await db
         .select()
         .from(users)
@@ -148,7 +156,7 @@ export class UserService {
         .where(eq(users.id, userId))
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'suspend',
@@ -157,8 +165,8 @@ export class UserService {
         oldValues: { status: user.status },
         newValues: { status: USER_STATUS.SUSPENDED },
         metadata: { reason },
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`User suspended: ${userId} by admin: ${adminId}`);
@@ -176,6 +184,8 @@ export class UserService {
     userAgent?: string
   ): Promise<User> {
     try {
+      const db = getDb();
+
       const [user] = await db
         .select()
         .from(users)
@@ -195,7 +205,7 @@ export class UserService {
         .where(eq(users.id, userId))
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'activate',
@@ -203,8 +213,8 @@ export class UserService {
         resourceId: userId,
         oldValues: { status: user.status },
         newValues: { status: USER_STATUS.ACTIVE },
-        ipAddress,
-        userAgent
+        ...(ipAddress ? { ipAddress } : {}),
+        ...(userAgent ? { userAgent } : {})
       });
 
       logger.info(`User reactivated: ${userId} by admin: ${adminId}`);

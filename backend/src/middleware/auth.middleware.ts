@@ -1,11 +1,11 @@
 import { Response, NextFunction } from 'express';
-import { verifyToken, createApiResponse } from '@/utils/helpers';
-import { db } from '@/config/database';
-import { users } from '@/models/schema';
+import { verifyToken, createApiResponse } from '../utils/helpers';
+import { getDb } from '../config/database';
+import { users } from '../models/schema';
 import { eq } from 'drizzle-orm';
-import { AuthRequest } from '@/types';
-import { USER_STATUS } from '@/utils/constants';
-import { logger } from '@/utils/logger';
+import { AuthRequest } from '../types';
+import { USER_STATUS } from '../utils/constants';
+import { logger } from '../utils/logger';
 
 export const authenticateToken = async (
   req: AuthRequest,
@@ -24,7 +24,8 @@ export const authenticateToken = async (
     }
 
     const decoded = verifyToken(token);
-    
+    const db = getDb();
+
     const [user] = await db
       .select()
       .from(users)
@@ -67,7 +68,8 @@ export const optionalAuth = async (
     if (token) {
       try {
         const decoded = verifyToken(token);
-        
+        const db = getDb();
+
         const [user] = await db
           .select()
           .from(users)
@@ -78,14 +80,12 @@ export const optionalAuth = async (
           req.user = user;
         }
       } catch (error) {
-        // Continue without user if token is invalid
         logger.warn('Optional auth failed:', error);
       }
     }
 
     next();
   } catch (error) {
-    // Continue without user
     next();
   }
 };
@@ -97,9 +97,7 @@ export const validateApiKey = async (
 ): Promise<void> => {
   try {
     const apiKey = req.headers['x-api-key'] as string;
-    
-    // For development/testing, allow requests without an API key
-    // In production, you would remove this check and enforce API key validation.
+
     if (!apiKey) {
       logger.warn('No API key provided. Skipping API key validation for development.');
       next();
@@ -107,15 +105,6 @@ export const validateApiKey = async (
     }
 
     // TODO: Implement actual API key validation logic here
-    // For example, query your database for the API key and check permissions
-    // const [foundKey] = await db.select().from(apiKeys).where(eq(apiKeys.key, apiKey)).limit(1);
-    // if (!foundKey || !foundKey.isActive) {
-    //   res.status(401).json(
-    //     createApiResponse(false, 'Invalid or inactive API key')
-    //   );
-    //   return;
-    // }
-
     next();
   } catch (error) {
     logger.error('API key validation error:', error);

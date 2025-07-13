@@ -1,12 +1,12 @@
-import { db } from '@/config/database';
-import { services, users, serviceReviews } from '@/models/schema';
+import { getDb } from '../config/database';
+import { services, users, serviceReviews } from '../models/schema';
 import { eq, and, desc, asc, ilike, gte, lte, sql } from 'drizzle-orm';
-import { Service, NewService, ServiceReview, NewServiceReview } from '@/models/schema';
-import { createError, calculatePagination } from '@/utils/helpers';
-import { SERVICE_STATUS } from '@/utils/constants';
-import { ServiceFilters, PaginationParams, PaginatedResponse } from '@/types';
+import { Service, NewService, ServiceReview, NewServiceReview } from '../models/schema';
+import { createError, calculatePagination } from '../utils/helpers';
+import { SERVICE_STATUS } from '../utils/constants';
+import { ServiceFilters, PaginationParams, PaginatedResponse } from '../types';
 import { AuditService } from './audit.service';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class ServiceService {
   private auditService: AuditService;
@@ -16,12 +16,14 @@ export class ServiceService {
   }
 
   async createService(
-    serviceData: NewService,
+    serviceData: any,
     userId: string,
     ipAddress?: string,
     userAgent?: string
   ): Promise<Service> {
     try {
+      const db = getDb();
+      
       const [newService] = await db
         .insert(services)
         .values({
@@ -31,7 +33,7 @@ export class ServiceService {
         })
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId,
         action: 'create',
@@ -55,10 +57,9 @@ export class ServiceService {
     pagination: PaginationParams
   ): Promise<PaginatedResponse<Service>> {
     try {
-      let query = db.select().from(services);
-      let countQuery = db.select({ count: sql<number>`count(*)` }).from(services);
-
-      # Apply filters
+      const db = getDb();
+      
+      // Build where conditions
       const conditions = [];
 
       if (filters.category) {
@@ -87,15 +88,18 @@ export class ServiceService {
         conditions.push(lte(services.price, filters.maxPrice.toString()));
       }
 
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-        countQuery = countQuery.where(and(...conditions));
-      }
+      // Create the where clause
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      # Get total count
-      const [{ count: total }] = await countQuery;
+      // Get total count
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(services)
+        .where(whereClause);
+      
+      const total = countResult[0]?.count || 0;
 
-      # Apply pagination and sorting
+      // Apply pagination and sorting
       const offset = (pagination.page - 1) * pagination.limit;
       const orderColumn = pagination.sortBy === 'price' ? services.price :
                          pagination.sortBy === 'rating' ? services.rating :
@@ -103,7 +107,11 @@ export class ServiceService {
       
       const orderDirection = pagination.sortOrder === 'desc' ? desc : asc;
       
-      const data = await query
+      // Get data with filters and pagination
+      const data = await db
+        .select()
+        .from(services)
+        .where(whereClause)
         .orderBy(orderDirection(orderColumn))
         .limit(pagination.limit)
         .offset(offset);
@@ -120,6 +128,8 @@ export class ServiceService {
 
   async getServiceById(id: string): Promise<Service | null> {
     try {
+      const db = getDb();
+      
       const [service] = await db
         .select()
         .from(services)
@@ -141,6 +151,8 @@ export class ServiceService {
     userAgent?: string
   ): Promise<Service> {
     try {
+      const db = getDb();
+      
       const [existingService] = await db
         .select()
         .from(services)
@@ -160,7 +172,7 @@ export class ServiceService {
         .where(eq(services.id, id))
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId,
         action: 'update',
@@ -187,6 +199,8 @@ export class ServiceService {
     userAgent?: string
   ): Promise<void> {
     try {
+      const db = getDb();
+      
       const [existingService] = await db
         .select()
         .from(services)
@@ -199,7 +213,7 @@ export class ServiceService {
 
       await db.delete(services).where(eq(services.id, id));
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId,
         action: 'delete',
@@ -224,6 +238,8 @@ export class ServiceService {
     userAgent?: string
   ): Promise<Service> {
     try {
+      const db = getDb();
+      
       const [service] = await db
         .select()
         .from(services)
@@ -243,7 +259,7 @@ export class ServiceService {
         .where(eq(services.id, id))
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'approve',
@@ -270,7 +286,9 @@ export class ServiceService {
     review?: string
   ): Promise<ServiceReview> {
     try {
-      # Check if service exists
+      const db = getDb();
+      
+      // Check if service exists
       const [service] = await db
         .select()
         .from(services)
@@ -281,7 +299,7 @@ export class ServiceService {
         throw createError('Service not found', 404);
       }
 
-      # Check if user already reviewed this service
+      // Check if user already reviewed this service
       const [existingReview] = await db
         .select()
         .from(serviceReviews)
@@ -295,7 +313,7 @@ export class ServiceService {
         throw createError('You have already reviewed this service', 409);
       }
 
-      # Create review
+      // Create review
       const [newReview] = await db
         .insert(serviceReviews)
         .values({
@@ -306,7 +324,7 @@ export class ServiceService {
         })
         .returning();
 
-      # Update service rating
+      // Update service rating
       await this.updateServiceRating(serviceId);
 
       logger.info(`Review added for service: ${serviceId} by user: ${userId}`);
@@ -319,6 +337,8 @@ export class ServiceService {
 
   private async updateServiceRating(serviceId: string): Promise<void> {
     try {
+      const db = getDb();
+      
       const reviews = await db
         .select()
         .from(serviceReviews)
@@ -347,6 +367,8 @@ export class ServiceService {
 
   async incrementBookings(serviceId: string): Promise<void> {
     try {
+      const db = getDb();
+      
       await db
         .update(services)
         .set({

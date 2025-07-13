@@ -1,14 +1,14 @@
-import { db } from '@/config/database';
-import { conversionRequests } from '@/models/schema';
-import { eq, desc, and } from 'drizzle-orm';
-import { ConversionRequest, NewConversionRequest } from '@/models/schema';
-import { createError, calculatePagination } from '@/utils/helpers';
-import { CONVERSION_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '@/utils/constants';
-import { PaginationParams, PaginatedResponse } from '@/types';
+import { getDb } from '../config/database';
+import { conversionRequests } from '../models/schema';
+import { eq, desc, and, sql } from 'drizzle-orm';
+import { ConversionRequest, NewConversionRequest } from '../models/schema';
+import { createError, calculatePagination } from '../utils/helpers';
+import { CONVERSION_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '../utils/constants';
+import { PaginationParams, PaginatedResponse } from '../types';
 import { TransactionService } from './transaction.service';
 import { UserService } from './user.service';
 import { AuditService } from './audit.service';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class ConversionService {
   private transactionService: TransactionService;
@@ -27,7 +27,9 @@ export class ConversionService {
     bankDetails: any
   ): Promise<ConversionRequest> {
     try {
-      # Check if organization has sufficient balance
+      const db = getDb();
+      
+      // Check if organization has sufficient balance
       const user = await this.userService.getUserById(organizationId);
       if (!user) {
         throw createError('Organization not found', 404);
@@ -38,7 +40,7 @@ export class ConversionService {
         throw createError('Insufficient wallet balance', 400);
       }
 
-      # Create conversion request
+      // Create conversion request
       const conversionData: NewConversionRequest = {
         organizationId,
         amount: amount.toString(),
@@ -52,7 +54,7 @@ export class ConversionService {
         .values(conversionData)
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: organizationId,
         action: 'create',
@@ -74,22 +76,24 @@ export class ConversionService {
     organizationId?: string
   ): Promise<PaginatedResponse<ConversionRequest>> {
     try {
-      let query = db.select().from(conversionRequests);
+      const db = getDb();
       
-      if (organizationId) {
-        query = query.where(eq(conversionRequests.organizationId, organizationId));
-      }
+      const whereClause = organizationId ? eq(conversionRequests.organizationId, organizationId) : undefined;
 
-      # Get total count
-      const totalQuery = organizationId 
-        ? db.select().from(conversionRequests).where(eq(conversionRequests.organizationId, organizationId))
-        : db.select().from(conversionRequests);
+      // Get total count
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(conversionRequests)
+        .where(whereClause);
       
-      const total = (await totalQuery).length;
+      const total = countResult[0]?.count || 0;
 
-      # Apply pagination
+      // Apply pagination
       const offset = (pagination.page - 1) * pagination.limit;
-      const data = await query
+      const data = await db
+        .select()
+        .from(conversionRequests)
+        .where(whereClause)
         .orderBy(desc(conversionRequests.createdAt))
         .limit(pagination.limit)
         .offset(offset);
@@ -110,6 +114,8 @@ export class ConversionService {
     transactionId?: string
   ): Promise<ConversionRequest> {
     try {
+      const db = getDb();
+      
       const [request] = await db
         .select()
         .from(conversionRequests)
@@ -124,7 +130,7 @@ export class ConversionService {
         throw createError('Conversion request is not pending', 400);
       }
 
-      # Update request status
+      // Update request status
       const [updatedRequest] = await db
         .update(conversionRequests)
         .set({
@@ -137,7 +143,7 @@ export class ConversionService {
         .where(eq(conversionRequests.id, requestId))
         .returning();
 
-      # Deduct amount from organization wallet
+      // Deduct amount from organization wallet
       const amount = parseFloat(request.amount);
       await this.userService.updateWalletBalance(
         request.organizationId,
@@ -145,7 +151,7 @@ export class ConversionService {
         'subtract'
       );
 
-      # Create transaction record
+      // Create transaction record
       await this.transactionService.createTransaction({
         userId: request.organizationId,
         type: TRANSACTION_TYPES.COIN_CONVERSION,
@@ -159,7 +165,7 @@ export class ConversionService {
         }
       });
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'approve',
@@ -184,6 +190,8 @@ export class ConversionService {
     reason: string
   ): Promise<ConversionRequest> {
     try {
+      const db = getDb();
+      
       const [request] = await db
         .select()
         .from(conversionRequests)
@@ -198,7 +206,7 @@ export class ConversionService {
         throw createError('Conversion request is not pending', 400);
       }
 
-      # Update request status
+      // Update request status
       const [updatedRequest] = await db
         .update(conversionRequests)
         .set({
@@ -211,7 +219,7 @@ export class ConversionService {
         .where(eq(conversionRequests.id, requestId))
         .returning();
 
-      # Log audit
+      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'reject',
@@ -232,6 +240,8 @@ export class ConversionService {
 
   async getConversionRequestById(id: string): Promise<ConversionRequest | null> {
     try {
+      const db = getDb();
+      
       const [request] = await db
         .select()
         .from(conversionRequests)

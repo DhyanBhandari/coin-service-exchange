@@ -155,7 +155,6 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 // Security
 export const SECURITY = {
   BCRYPT_ROUNDS: 12,
-  JWT_ALGORITHM: 'HS256',
   SESSION_TIMEOUT: 7 * 24 * 60 * 60 * 1000, // 7 days
   PASSWORD_MIN_LENGTH: 8,
   API_KEY_LENGTH: 32

@@ -8,7 +8,7 @@ import Joi from 'joi';
 const router = Router();
 const conversionController = new ConversionController();
 
-# Validation schemas
+//Validation schemas
 const createRequestSchema = Joi.object({
   amount: Joi.number().min(50).max(100000).required(),
   bankDetails: Joi.object({
@@ -36,7 +36,7 @@ const getRequestsQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).optional()
 });
 
-# Routes
+// Routes
 router.post('/', authenticateToken, requireOrg, validateBody(createRequestSchema), conversionController.createRequest);
 router.get('/', authenticateToken, requireOrgOrAdmin, validateQuery(getRequestsQuerySchema), conversionController.getRequests);
 router.get('/:id', authenticateToken, requireOrgOrAdmin, validateParams(requestIdSchema), conversionController.getRequestById);

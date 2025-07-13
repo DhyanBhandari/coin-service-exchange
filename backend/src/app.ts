@@ -2,37 +2,35 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv'; // Import dotenv
+import dotenv from 'dotenv';
 
-// Load environment variables FIRST. This must be at the very top.
+// Load environment variables FIRST
 dotenv.config();
 
-// Now that environment variables are loaded, import and initialize database.
-// The initializeDatabase function will now safely access process.env.DATABASE_URL.
-import { testConnection } from '@/config/database';
-import { testSupabaseConnection } from '@/config/supabase';
-import { testRazorpayConnection } from '@/config/razorpay';
+// Initialize database after loading environment variables
+import { initializeDatabase, testConnection } from './config/database';
+import { testSupabaseConnection } from './config/supabase';
+import { testRazorpayConnection } from './config/razorpay';
 
-// Call the database initialization function right after loading env variables.
-// This ensures the database client and drizzle instance are ready.
-// initializeDatabase(); // Removed because it does not exist in the module
+// Initialize database connection
+initializeDatabase();
 
 // Import middleware
-import { errorHandler, notFound } from '@/middleware/error.middleware';
+import { errorHandler, notFound, asyncHandler } from './middleware/error.middleware';
 
 // Import routes
-import authRoutes from '@/routes/auth.routes';
-import userRoutes from '@/routes/user.routes';
-import serviceRoutes from '@/routes/service.routes';
-import paymentRoutes from '@/routes/payment.routes';
-import conversionRoutes from '@/routes/conversion.routes';
-import transactionRoutes from '@/routes/transaction.routes';
-import adminRoutes from '@/routes/admin.routes';
+import authRoutes from './routes/auth.routes';
+import userRoutes from './routes/user.routes';
+import serviceRoutes from './routes/service.routes';
+import paymentRoutes from './routes/payment.routes';
+import conversionRoutes from './routes/conversion.routes';
+import transactionRoutes from './routes/transaction.routes';
+import adminRoutes from './routes/admin.routes';
 
 // Import utils
-import { logger } from '@/utils/logger';
-import { createApiResponse } from '@/utils/helpers';
-import { API_PREFIX } from '@/utils/constants';
+import { logger } from './utils/logger';
+import { createApiResponse } from './utils/helpers';
+import { API_PREFIX } from './utils/constants';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -151,23 +149,86 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start server
 const server = app.listen(PORT, async () => {
-    logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+    // Beautiful startup banner
+    console.log('\n' + '='.repeat(80));
+    console.log('🚀 ERTHAEXCHANGE BACKEND SERVER STARTING...');
+    console.log('='.repeat(80));
+    
+    logger.info(`🌐 Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+    console.log(`📡 Server URL: http://localhost:${PORT}`);
+    console.log(`🔗 API Base URL: http://localhost:${PORT}${API_PREFIX}`);
+    console.log(`💻 Environment: ${process.env.NODE_ENV || 'development'}`);
+    
+    console.log('\n📋 TESTING SERVICE CONNECTIONS...');
+    console.log('-'.repeat(50));
 
-    // Test connections
+    // Test connections with enhanced logging
     try {
-        // testConnection now uses the initialized client
         const dbConnected = await testConnection();
         const supabaseConnected = await testSupabaseConnection();
         const razorpayConnected = await testRazorpayConnection();
 
-        if (dbConnected && supabaseConnected && razorpayConnected) {
-            logger.info('All services connected successfully');
+        // Database status
+        if (dbConnected) {
+            console.log('✅ Database (PostgreSQL)    | Connected & Ready');
         } else {
-            logger.warn('Some services failed to connect. Check configurations.');
+            console.log('❌ Database (PostgreSQL)    | Connection Failed');
+        }
+
+        // Supabase status
+        if (supabaseConnected) {
+            console.log('✅ Supabase Storage         | Connected & Ready');
+        } else {
+            console.log('❌ Supabase Storage         | Connection Failed');
+        }
+
+        // Razorpay status
+        if (razorpayConnected) {
+            console.log('✅ Razorpay Payment         | Connected & Ready');
+        } else {
+            console.log('❌ Razorpay Payment         | Connection Failed');
+        }
+
+        console.log('-'.repeat(50));
+
+        // Overall status
+        if (dbConnected && supabaseConnected && razorpayConnected) {
+            console.log('🎉 ALL SERVICES CONNECTED SUCCESSFULLY!');
+            console.log('🔥 Backend is ready to handle requests!');
+            console.log('\n📚 Available API Endpoints:');
+            console.log(`   👤 Authentication: ${API_PREFIX}/auth`);
+            console.log(`   👥 Users:          ${API_PREFIX}/users`);
+            console.log(`   🛍️  Services:       ${API_PREFIX}/services`);
+            console.log(`   💳 Payments:       ${API_PREFIX}/payments`);
+            console.log(`   🔄 Conversions:    ${API_PREFIX}/conversions`);
+            console.log(`   📊 Transactions:   ${API_PREFIX}/transactions`);
+            console.log(`   🔧 Admin:          ${API_PREFIX}/admin`);
+            console.log(`   ❤️  Health Check:   /health`);
+            
+            console.log('\n🎯 QUICK START GUIDE:');
+            console.log('   1. Register a user: POST /api/v1/auth/register');
+            console.log('   2. Login: POST /api/v1/auth/login');
+            console.log('   3. Get profile: GET /api/v1/auth/profile');
+            console.log('   4. Check health: GET /health');
+            
+            logger.info('🚀 ErthaExchange Backend Server is fully operational!');
+        } else {
+            console.log('⚠️  SOME SERVICES FAILED TO CONNECT');
+            console.log('🔧 Please check your configuration:');
+            if (!dbConnected) console.log('   - Check DATABASE_URL in .env file');
+            if (!supabaseConnected) console.log('   - Check SUPABASE_URL and keys in .env file');
+            if (!razorpayConnected) console.log('   - Check RAZORPAY credentials in .env file');
+            
+            logger.warn('⚠️  Server started but some services are unavailable');
         }
     } catch (error) {
+        console.log('❌ CRITICAL ERROR DURING STARTUP');
         logger.error('Failed to test connections:', error);
     }
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('🎊 ERTHAEXCHANGE BACKEND SERVER READY!');
+    console.log('='.repeat(80) + '\n');
 });
 
 export default app;

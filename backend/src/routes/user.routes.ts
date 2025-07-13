@@ -8,7 +8,7 @@ import Joi from 'joi';
 const router = Router();
 const userController = new UserController();
 
-# Validation schemas
+// Validation schemas
 const updateProfileSchema = Joi.object({
   name: Joi.string().min(2).max(100).optional(),
   phone: Joi.string().optional(),
@@ -21,7 +21,7 @@ const userIdSchema = Joi.object({
   id: Joi.string().uuid().required()
 });
 
-# Routes
+// Routes
 router.get('/profile', authenticateToken, requireAnyRole, userController.getProfile);
 router.put('/profile', authenticateToken, requireAnyRole, validateBody(updateProfileSchema), userController.updateProfile);
 router.get('/wallet', authenticateToken, requireAnyRole, userController.getWalletBalance);

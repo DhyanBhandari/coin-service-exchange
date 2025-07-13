@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '@/types';
-import { TransactionService } from '@/services/transaction.service';
-import { createApiResponse, validatePaginationParams } from '@/utils/helpers';
-import { asyncHandler } from '@/middleware/error.middleware';
+import { AuthRequest } from '../types';
+import { TransactionService } from '../services/transaction.service';
+import { createApiResponse, validatePaginationParams } from '../utils/helpers';
+import { asyncHandler } from '../middleware/error.middleware';
 
 export class TransactionController {
   private transactionService: TransactionService;
@@ -11,15 +11,25 @@ export class TransactionController {
     this.transactionService = new TransactionService();
   }
 
-  getTransactions = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const pagination = validatePaginationParams(req.query.page, req.query.limit);
-    const filters = {
-      userId: req.user!.role === 'admin' ? req.query.userId as string : req.user!.id,
-      type: req.query.type as string,
-      status: req.query.status as string,
-      startDate: req.query.startDate as string,
-      endDate: req.query.endDate as string
-    };
+  getTransactions = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
+    
+    // Create filters object with proper type handling
+    const filters: any = {};
+    
+    // Set userId based on user role
+    if (req.user!.role === 'admin' && req.query.userId) {
+      filters.userId = req.query.userId as string;
+    } else {
+      filters.userId = req.user!.id;
+    }
+    
+    // Set other filters only if they exist
+    if (req.query.type) filters.type = req.query.type as string;
+    if (req.query.status) filters.status = req.query.status as string;
+    if (req.query.startDate) filters.startDate = req.query.startDate as string;
+    if (req.query.endDate) filters.endDate = req.query.endDate as string;
+    if (req.query.serviceId) filters.serviceId = req.query.serviceId as string;
 
     const result = await this.transactionService.getTransactions(filters, pagination);
 
@@ -28,14 +38,22 @@ export class TransactionController {
     );
   });
 
-  getTransactionById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getTransactionById = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json(
+        createApiResponse(false, 'Transaction ID is required')
+      );
+      return;
+    }
 
     const transaction = await this.transactionService.getTransactionById(id);
     if (!transaction) {
-      return res.status(404).json(
+      res.status(404).json(
         createApiResponse(false, 'Transaction not found')
       );
+      return;
     }
 
     res.json(
@@ -43,7 +61,7 @@ export class TransactionController {
     );
   });
 
-  getStats = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getStats = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.role === 'admin' ? undefined : req.user!.id;
     const stats = await this.transactionService.getTransactionStats(userId);
 
@@ -52,8 +70,8 @@ export class TransactionController {
     );
   });
 
-  getUserTransactionHistory = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const pagination = validatePaginationParams(req.query.page, req.query.limit);
+  getUserTransactionHistory = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
 
     const result = await this.transactionService.getUserTransactionHistory(req.user!.id, pagination);
 

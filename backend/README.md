@@ -1,58 +1,22 @@
-# ErthaExchange Backend
+# ErthaExchange Backend Setup Guide
 
-A comprehensive backend system for the ErthaExchange platform - a coin-based service marketplace where users can purchase coins, organizations can list services, and seamless transactions occur between parties.
+## Prerequisites
 
-## 🚀 Features
+1. **Node.js** (v18 or higher)
+2. **PostgreSQL** database
+3. **Supabase** account
+4. **Razorpay** account (for payments)
 
-- **User Management**: Registration, authentication, profile management
-- **Service Marketplace**: Organizations can list services, users can browse and book
-- **Coin System**: Purchase coins, use for services, conversion back to currency
-- **Payment Integration**: Razorpay integration for secure payments
-- **Transaction Management**: Complete audit trail of all transactions
-- **Admin Dashboard**: Comprehensive admin controls and analytics
-- **Audit Logging**: Complete activity tracking for compliance
-- **Rate Limiting**: Built-in API rate limiting for security
-- **Real-time Notifications**: Event-driven notification system
+## Step 1: Environment Setup
 
-## 🛠 Tech Stack
-
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js
-- **Database**: PostgreSQL with Drizzle ORM
-- **Authentication**: JWT tokens
-- **Payments**: Razorpay integration
-- **Storage**: Supabase integration
-- **Validation**: Joi schemas
-- **Logging**: Winston logger
-- **Security**: Helmet, CORS, Rate limiting
-
-## 📋 Prerequisites
-
-Before running this project, make sure you have:
-
-- Node.js (v18 or higher)
-- PostgreSQL database
-- Supabase account
-- Razorpay account (for payments)
-
-## 🚦 Quick Start
-
-### 1. Clone & Install
-
-```bash
-git clone <repository-url>
-cd backend
-npm install
-```
-
-### 2. Environment Setup
-
-Create a `.env` file in the root directory:
+Create a `.env` file in your backend root directory:
 
 ```env
 # Database
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
-SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
+DATABASE_URL=postgresql://postgres:your-password@localhost:5432/erthaexchange
+
+# Supabase
+SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
@@ -65,58 +29,163 @@ FRONTEND_URL=http://localhost:3000
 JWT_SECRET=your-super-secret-jwt-key-at-least-32-characters-long
 JWT_EXPIRES_IN=7d
 
-# Razorpay
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Razorpay Configuration
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxx
 RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxxxx
 RAZORPAY_WEBHOOK_SECRET=xxxxxxxxxxxxxxxxxx
 
-# Admin
+# Payment Configuration
+PAYMENT_CURRENCY=INR
+MIN_PAYMENT_AMOUNT=10
+MAX_PAYMENT_AMOUNT=1000000
+
+# Logging
+LOG_LEVEL=info
+
+# Admin Configuration
 ADMIN_EMAIL=admin@erthaexchange.com
 ADMIN_PASSWORD=admin123
 ```
 
-### 3. Database Setup
+## Step 2: Install Dependencies
 
 ```bash
-# Run database migrations
-npm run db:migrate
+npm install
+```
 
-# Seed database with sample data
+## Step 3: Database Setup
+
+### Option A: Using Supabase (Recommended)
+
+1. Go to [Supabase Dashboard](https://app.supabase.com/)
+2. Create a new project
+3. Go to Settings > Database
+4. Copy the connection string and update your `DATABASE_URL`
+5. Run migrations:
+
+```bash
+npx drizzle-kit push:pg
+```
+
+### Option B: Local PostgreSQL
+
+1. Install PostgreSQL locally
+2. Create a database called `erthaexchange`
+3. Update your `DATABASE_URL` in `.env`
+4. Run migrations:
+
+```bash
+npm run db:migrate
+```
+
+## Step 4: Run Database Migrations
+
+```bash
+# Generate migration files (if needed)
+npm run db:generate
+
+# Push schema to database
+npm run db:migrate
+```
+
+## Step 5: Seed Database (Optional)
+
+```bash
 npm run seed
 ```
 
-### 4. Development
+This will create sample data including:
+- Admin user: `admin@erthaexchange.com` / `admin123`
+- Organization user: `org@techsolutions.com` / `org123`
+- Regular user: `john@example.com` / `user123`
+
+## Step 6: Start Development Server
 
 ```bash
-# Start development server
 npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
 ```
 
-## 📁 Project Structure
+The server will start on `http://localhost:5000`
 
-```
-backend/
-├── src/
-│   ├── config/          # Database, Supabase, Razorpay configs
-│   ├── controllers/     # Route controllers
-│   ├── middleware/      # Auth, validation, error middleware
-│   ├── models/          # Drizzle schema definitions
-│   ├── routes/          # API route definitions
-│   ├── services/        # Business logic layer
-│   ├── types/           # TypeScript type definitions
-│   ├── utils/           # Helper functions and constants
-│   └── app.ts           # Main application file
-├── migrations/          # Database migration files
-└── scripts/             # Utility scripts
+## Step 7: Test the API
+
+### Health Check
+```bash
+curl http://localhost:5000/health
 ```
 
-## 🔑 API Endpoints
+### Register a User
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test User",
+    "email": "test@example.com",
+    "password": "Test123!@#",
+    "role": "user"
+  }'
+```
+
+### Login
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "Test123!@#"
+  }'
+```
+
+## Common Issues and Solutions
+
+### 1. Database Connection Error
+
+**Error**: `Database connection failed`
+
+**Solution**:
+- Check your `DATABASE_URL` in `.env`
+- Ensure PostgreSQL is running
+- Verify database credentials
+- Check if the database exists
+
+### 2. JWT Secret Error
+
+**Error**: `JWT_SECRET is not set`
+
+**Solution**:
+- Add `JWT_SECRET` to your `.env` file
+- Make sure it's at least 32 characters long
+
+### 3. TypeScript Path Resolution
+
+**Error**: `Cannot find module '@/...'`
+
+**Solution**:
+- Ensure `tsconfig-paths` is installed
+- Check `tsconfig.json` paths configuration
+- Restart your development server
+
+### 4. Drizzle Migration Issues
+
+**Error**: `Migration failed`
+
+**Solution**:
+```bash
+# Check database connection
+npm run db:studio
+
+# Generate fresh migrations
+npm run db:generate
+
+# Push to database
+npm run db:migrate
+```
+
+## Available API Endpoints
 
 ### Authentication
 - `POST /api/v1/auth/register` - User registration
@@ -132,89 +201,46 @@ backend/
 
 ### Services
 - `POST /api/v1/services` - Create service (Organizations)
-- `GET /api/v1/services` - List services with filters
+- `GET /api/v1/services` - List services
 - `GET /api/v1/services/:id` - Get service details
 - `PUT /api/v1/services/:id` - Update service
 - `DELETE /api/v1/services/:id` - Delete service
-- `POST /api/v1/services/:id/book` - Book service
-- `POST /api/v1/services/:id/reviews` - Add review
 
 ### Payments
 - `POST /api/v1/payments/orders` - Create payment order
 - `POST /api/v1/payments/verify` - Verify payment
 - `POST /api/v1/payments/webhook` - Payment webhook
-- `POST /api/v1/payments/refund` - Process refund (Admin)
-
-### Conversions
-- `POST /api/v1/conversions` - Request coin conversion
-- `GET /api/v1/conversions` - List conversion requests
-- `GET /api/v1/conversions/:id` - Get conversion details
-- `POST /api/v1/conversions/:id/approve` - Approve conversion (Admin)
-- `POST /api/v1/conversions/:id/reject` - Reject conversion (Admin)
 
 ### Transactions
 - `GET /api/v1/transactions` - List transactions
 - `GET /api/v1/transactions/:id` - Get transaction details
 - `GET /api/v1/transactions/stats` - Transaction statistics
-- `GET /api/v1/transactions/history` - User transaction history
 
 ### Admin
 - `GET /api/v1/admin/dashboard` - Dashboard statistics
 - `GET /api/v1/admin/activity` - Recent activity
 - `GET /api/v1/admin/health` - System health check
-- `POST /api/v1/admin/services/:id/approve` - Approve service
-- `POST /api/v1/admin/users/:id/suspend` - Suspend user
-- `POST /api/v1/admin/users/:id/reactivate` - Reactivate user
-- `GET /api/v1/admin/audit-logs` - Audit logs
 
-## 🔒 Security Features
+## Development Tips
 
-- **JWT Authentication**: Secure token-based authentication
-- **Role-based Access Control**: User, Organization, Admin roles
-- **Rate Limiting**: Configurable rate limits per endpoint
-- **Input Validation**: Comprehensive Joi validation schemas
-- **SQL Injection Protection**: Parameterized queries with Drizzle ORM
-- **CORS Protection**: Configurable CORS policies
-- **Helmet Security**: Security headers and protection
-- **Audit Logging**: Complete activity tracking
+1. **Use Drizzle Studio** for database management:
+   ```bash
+   npm run db:studio
+   ```
 
-## 💳 Payment Flow
+2. **Check logs** for debugging:
+   ```bash
+   tail -f logs/combined.log
+   ```
 
-1. **Create Order**: Frontend requests payment order creation
-2. **Process Payment**: User completes payment via Razorpay
-3. **Verify Payment**: Backend verifies payment signature
-4. **Update Balance**: User's coin balance is updated
-5. **Audit Trail**: Transaction is logged for compliance
+3. **Environment Variables**: Always restart the server after changing `.env`
 
-## 🔄 Conversion Flow
+4. **Database Schema Changes**:
+   - Update `src/models/schema.ts`
+   - Run `npm run db:generate`
+   - Run `npm run db:migrate`
 
-1. **Request Conversion**: Organization requests coin-to-currency conversion
-2. **Admin Review**: Admin reviews and approves/rejects request
-3. **Process Transfer**: Bank transfer is initiated (external process)
-4. **Update Balance**: Organization's coin balance is debited
-5. **Completion**: Conversion is marked as completed
-
-## 🧪 Testing
-
-```bash
-# Run tests
-npm test
-
-# Run tests with coverage
-npm run test:coverage
-
-# Run linting
-npm run lint
-```
-
-## 📊 Monitoring & Logging
-
-- **Winston Logging**: Structured logging with multiple transports
-- **Health Endpoints**: Built-in health check endpoints
-- **Error Tracking**: Comprehensive error handling and reporting
-- **Audit Trails**: Complete activity logging for compliance
-
-## 🚀 Deployment
+## Production Deployment
 
 ### Environment Variables for Production
 
@@ -226,44 +252,29 @@ RAZORPAY_KEY_ID=your-production-razorpay-key
 RAZORPAY_KEY_SECRET=your-production-razorpay-secret
 ```
 
-### Docker Deployment
+### Build and Start
 
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-EXPOSE 5000
-CMD ["npm", "start"]
+```bash
+npm run build
+npm start
 ```
 
-## 🤝 Contributing
+## Troubleshooting
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+If you encounter any issues:
 
-## 📝 License
+1. **Check the logs**: Look at the console output or log files
+2. **Verify environment variables**: Ensure all required variables are set
+3. **Database connectivity**: Test database connection manually
+4. **Dependencies**: Run `npm install` to ensure all dependencies are installed
+5. **TypeScript compilation**: Run `npm run build` to check for TypeScript errors
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Support
 
-## 🆘 Support
+For issues or questions:
+- Check the logs first
+- Verify your environment configuration
+- Ensure all dependencies are installed
+- Test database connectivity
 
-For support, please contact:
-- Email: support@erthaexchange.com
-- Documentation: [API Documentation](https://docs.erthaexchange.com)
-- Issues: [GitHub Issues](https://github.com/your-repo/issues)
-
-## 🔄 Changelog
-
-### v1.0.0
-- Initial release with core functionality
-- User management and authentication
-- Service marketplace
-- Payment integration
-- Admin dashboard
-- Audit logging
+The backend is now ready for development! 🚀

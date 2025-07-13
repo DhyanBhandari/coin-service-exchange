@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { User } from '@/models/schema';
+import { User } from '../models/schema';
 
 export interface AuthRequest extends Request {
   user?: User;

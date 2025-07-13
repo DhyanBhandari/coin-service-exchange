@@ -1,11 +1,11 @@
-import { db } from '@/config/database';
-import { transactions } from '@/models/schema';
+import { getDb } from '../config/database';
+import { transactions } from '../models/schema';
 import { eq, and, desc, gte, lte, sql } from 'drizzle-orm';
-import { Transaction, NewTransaction } from '@/models/schema';
-import { createError, calculatePagination } from '@/utils/helpers';
-import { TransactionFilters, PaginationParams, PaginatedResponse } from '@/types';
+import { Transaction, NewTransaction } from '../models/schema';
+import { createError, calculatePagination } from '../utils/helpers';
+import { TransactionFilters, PaginationParams, PaginatedResponse } from '../types';
 import { UserService } from './user.service';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class TransactionService {
   private userService: UserService;
@@ -16,7 +16,9 @@ export class TransactionService {
 
   async createTransaction(transactionData: NewTransaction): Promise<Transaction> {
     try {
-      # Get user's current balance
+      const db = getDb();
+      
+      // Get user's current balance
       const user = await this.userService.getUserById(transactionData.userId);
       if (!user) {
         throw createError('User not found', 404);
@@ -25,7 +27,7 @@ export class TransactionService {
       const currentBalance = parseFloat(user.walletBalance);
       const transactionAmount = parseFloat(transactionData.amount);
 
-      # Calculate new balance based on transaction type
+      // Calculate new balance based on transaction type
       let newBalance = currentBalance;
       if (transactionData.type === 'coin_purchase') {
         newBalance += transactionAmount;
@@ -35,7 +37,7 @@ export class TransactionService {
         newBalance += transactionAmount;
       }
 
-      # Create transaction with balance information
+      // Create transaction with balance information
       const [newTransaction] = await db
         .insert(transactions)
         .values({
@@ -58,10 +60,9 @@ export class TransactionService {
     pagination: PaginationParams
   ): Promise<PaginatedResponse<Transaction>> {
     try {
-      let query = db.select().from(transactions);
-      let countQuery = db.select({ count: sql<number>`count(*)` }).from(transactions);
-
-      # Apply filters
+      const db = getDb();
+      
+      // Build where conditions
       const conditions = [];
 
       if (filters.userId) {
@@ -88,17 +89,23 @@ export class TransactionService {
         conditions.push(lte(transactions.createdAt, new Date(filters.endDate)));
       }
 
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-        countQuery = countQuery.where(and(...conditions));
-      }
+      // Create the where clause
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      # Get total count
-      const [{ count: total }] = await countQuery;
+      // Get total count
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(transactions)
+        .where(whereClause);
+      
+      const total = countResult[0]?.count || 0;
 
-      # Apply pagination
+      // Apply pagination
       const offset = (pagination.page - 1) * pagination.limit;
-      const data = await query
+      const data = await db
+        .select()
+        .from(transactions)
+        .where(whereClause)
         .orderBy(desc(transactions.createdAt))
         .limit(pagination.limit)
         .offset(offset);
@@ -115,6 +122,8 @@ export class TransactionService {
 
   async getTransactionById(id: string): Promise<Transaction | null> {
     try {
+      const db = getDb();
+      
       const [transaction] = await db
         .select()
         .from(transactions)
@@ -134,6 +143,8 @@ export class TransactionService {
     metadata?: Record<string, any>
   ): Promise<Transaction> {
     try {
+      const db = getDb();
+      
       const [updatedTransaction] = await db
         .update(transactions)
         .set({
@@ -170,13 +181,14 @@ export class TransactionService {
 
   async getTransactionStats(userId?: string): Promise<any> {
     try {
-      let query = db.select().from(transactions);
+      const db = getDb();
       
-      if (userId) {
-        query = query.where(eq(transactions.userId, userId));
-      }
-
-      const allTransactions = await query;
+      const whereClause = userId ? eq(transactions.userId, userId) : undefined;
+      
+      const allTransactions = await db
+        .select()
+        .from(transactions)
+        .where(whereClause);
 
       const stats = {
         total: allTransactions.length,

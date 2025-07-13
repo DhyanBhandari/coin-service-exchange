@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '@/types';
-import { PaymentService } from '@/services/payment.service';
-import { createApiResponse } from '@/utils/helpers';
-import { asyncHandler } from '@/middleware/error.middleware';
+import { AuthRequest } from '../types';
+import { PaymentService } from '../services/payment.service';
+import { createApiResponse } from '../utils/helpers';
+import { asyncHandler } from '../middleware/error.middleware';
 
 export class PaymentController {
   private paymentService: PaymentService;
@@ -38,7 +38,7 @@ export class PaymentController {
   handleWebhook = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { event, payload } = req.body;
 
-    # Handle different webhook events
+    // Handle different webhook events
     switch (event) {
       case 'payment.failed':
         await this.paymentService.handlePaymentFailure(
@@ -46,7 +46,7 @@ export class PaymentController {
           payload.error.description
         );
         break;
-      # Add more webhook event handlers as needed
+      // Add more webhook event handlers as needed
     }
 
     res.json({ status: 'ok' });

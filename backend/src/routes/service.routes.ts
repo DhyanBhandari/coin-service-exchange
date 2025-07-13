@@ -8,7 +8,7 @@ import Joi from 'joi';
 const router = Router();
 const serviceController = new ServiceController();
 
-# Validation schemas
+// Validation schemas
 const createServiceSchema = Joi.object({
   title: Joi.string().min(5).max(200).required(),
   description: Joi.string().min(20).max(2000).required(),
@@ -53,7 +53,7 @@ const addReviewSchema = Joi.object({
   review: Joi.string().max(1000).optional()
 });
 
-# Routes
+// Routes
 router.post('/', authenticateToken, requireOrg, validateBody(createServiceSchema), serviceController.createService);
 router.get('/', optionalAuth, validateQuery(getServicesQuerySchema), serviceController.getServices);
 router.get('/:id', optionalAuth, validateParams(serviceIdSchema), serviceController.getServiceById);
