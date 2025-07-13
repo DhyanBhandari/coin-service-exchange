@@ -20,49 +20,45 @@ export const errorHandler = (
     res: Response,
     next: NextFunction
 ) => {
-    // Create a mutable copy of the error object
-    let err = { ...error } as any;
-    err.message = error.message;
-
     // Log the error for debugging purposes
-    logger.error(err);
+    logger.error(error);
 
     // Initialize default error response values
     let statusCode = 500;
     let message = 'Something went wrong!';
 
     // Handle specific error types
-    if (err.name === 'CastError') {
-        message = `Invalid ${err.path}: ${err.value}.`;
+    if ((error as any).name === 'CastError') {
+        message = `Invalid ${(error as any).path}: ${(error as any).value}.`;
         statusCode = 400;
-    } else if (err.name === 'ValidationError') {
-        const errors = Object.values(err.errors).map((el: any) => el.message);
+    } else if ((error as any).name === 'ValidationError') {
+        const errors = Object.values((error as any).errors).map((el: any) => el.message);
         message = `Invalid input data. ${errors.join('. ')}`;
         statusCode = 400;
-    } else if (err.code === 11000) {
-        const value = err.keyValue ? Object.values(err.keyValue)[0] : 'duplicate value';
+    } else if ((error as any).code === 11000) {
+        const value = (error as any).keyValue ? Object.values((error as any).keyValue)[0] : 'duplicate value';
         message = `Duplicate field value: ${value}. Please use another value!`;
         statusCode = 400;
     }
 
     // Joi validation error
-    if (err.isJoi) {
-        message = err.details.map((el: any) => el.message).join('. ');
+    if ((error as any).isJoi) {
+        message = (error as any).details.map((el: any) => el.message).join('. ');
         statusCode = 400;
     }
 
     // JWT errors
-    if (err.name === 'JsonWebTokenError') {
+    if ((error as any).name === 'JsonWebTokenError') {
         message = 'Invalid token. Please log in again!';
         statusCode = 401;
-    } else if (err.name === 'TokenExpiredError') {
+    } else if ((error as any).name === 'TokenExpiredError') {
         message = 'Your token has expired! Please log in again.';
         statusCode = 401;
     }
 
     // PostgreSQL/Drizzle errors
-    if (typeof err.code === 'string' && err.code.startsWith('23')) {
-        message = `Database error: ${err.message}.`;
+    if (typeof (error as any).code === 'string' && (error as any).code.startsWith('23')) {
+        message = `Database error: ${error.message}.`;
         statusCode = 400;
     }
 
@@ -78,7 +74,12 @@ export const errorHandler = (
     }
 
     // Send the structured error response
-    res.status(statusCode).json(createApiResponse(false, message));
+    try {
+        res.status(statusCode).json(createApiResponse(false, message));
+    } catch (responseError) {
+        logger.error('Error sending response:', responseError);
+        res.status(500).send('Internal Server Error');
+    }
 };
 
 /**

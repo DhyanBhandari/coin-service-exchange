@@ -30,26 +30,38 @@ export const testRazorpayConnection = async () => {
             return true; // Explicitly return true for demo mode
         }
 
-        // Try to create a test order to verify credentials
-        // Note: This actual API call will only succeed if real, valid keys are provided.
-        // For local testing without real keys, the 'demo mode' path above will be taken.
-        const testOrder = await razorpay.orders.create({
+        // Try to create a test order to verify credentials with timeout
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Razorpay connection timeout')), 10000)
+        );
+        
+        const orderPromise = razorpay.orders.create({
             amount: 100, // ₹1 (minimum amount for testing)
             currency: 'INR',
             receipt: 'test_receipt_' + Date.now(),
         });
-
-        if (testOrder.id) {
+        
+        const testOrder = await Promise.race([orderPromise, timeoutPromise]);
+        
+        if (testOrder && testOrder.id) {
             logger.info('Razorpay connected successfully');
-            return true; // Explicitly return true on success
+            return true;
         }
-        // If testOrder.id is not present but no error was thrown,
-        // it implies an unexpected response, so we should treat it as a failure.
+        
         logger.error('Razorpay connection failed: Test order ID not received.');
         return false;
 
     } catch (error) {
-        logger.error('Razorpay connection failed:', error);
-        return false; // Explicitly return false on error to cover all code paths
+        // Handle specific error cases
+        if (error instanceof Error) {
+            if (error.message.includes('timeout')) {
+                logger.warn('Razorpay connection timeout - continuing with limited functionality');
+            } else {
+                logger.error('Razorpay connection failed:', error.message);
+            }
+        } else {
+            logger.error('Razorpay connection failed with unknown error');
+        }
+        return false;
     }
 };

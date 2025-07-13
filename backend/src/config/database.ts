@@ -15,16 +15,21 @@ export function initializeDatabase() {
         throw new Error('DATABASE_URL is not set');
     }
 
-    // Extract only the URL part from the environment variable string
-    const connectionString = rawConnectionString.startsWith('DATABASE_URL=')
-        ? rawConnectionString.substring('DATABASE_URL='.length)
-        : rawConnectionString;
+    // Clean up the connection string - remove any duplicate DATABASE_URL= prefix
+    let connectionString = rawConnectionString.trim();
+    
+    // Handle case where DATABASE_URL appears twice (DATABASE_URL=DATABASE_URL=...)
+    if (connectionString.startsWith('DATABASE_URL=DATABASE_URL=')) {
+        connectionString = connectionString.substring('DATABASE_URL=DATABASE_URL='.length);
+    } else if (connectionString.startsWith('DATABASE_URL=')) {
+        connectionString = connectionString.substring('DATABASE_URL='.length);
+    }
 
     if (!client) { // Prevent re-initializing if already done
         client = postgres(connectionString, {
-            max: 20,
-            idle_timeout: 30,
-            connect_timeout: 60,
+            max: 10,
+            idle_timeout: 20,
+            connect_timeout: 30,
             ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
         });
 
@@ -57,7 +62,13 @@ export { db };
 export const testConnection = async () => {
     try {
         const currentClient = getClient();
-        await currentClient`SELECT 1`;
+        // Use a timeout for the connection test
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection test timeout')), 10000)
+        );
+        
+        await Promise.race([currentClient`SELECT 1`, timeoutPromise]);
+        
         logger.info('Database connected successfully');
         return true;
     } catch (error) {

@@ -25,12 +25,28 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 // Test Supabase connection
 export const testSupabaseConnection = async () => {
   try {
-    const { data, error } = await supabase.from('users').select('count').limit(1);
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Supabase connection timeout')), 10000)
+    );
+    
+    const connectionPromise = supabase.from('users').select('count').limit(1);
+    
+    const { data, error } = await Promise.race([connectionPromise, timeoutPromise]);
+    
     if (error) throw error;
     logger.info('Supabase connected successfully');
     return true;
   } catch (error) {
-    logger.error('Supabase connection failed:', error);
+    if (error instanceof Error) {
+      if (error.message.includes('timeout')) {
+        logger.warn('Supabase connection timeout - continuing with limited functionality');
+      } else {
+        logger.error('Supabase connection failed:', error.message);
+      }
+    } else {
+      logger.error('Supabase connection failed with unknown error');
+    }
     return false;
   }
 };
