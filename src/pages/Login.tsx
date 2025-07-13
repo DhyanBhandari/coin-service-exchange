@@ -30,27 +30,29 @@ const Login = () => {
       try {
         const response = await apiService.login({ email, password });
         
-        console.log('Login response:', response);
+        if (response) {
+          console.log('Login response:', response);
 
-        if (response.success && response.data) {
-          const user = response.data.user;
-          
-          toast({
-            title: "Login Successful",
-            description: `Welcome back, ${user.name}!`,
-          });
+          if (response.success && response.data) {
+            const user = response.data.user;
+            
+            toast({
+              title: "Login Successful",
+              description: `Welcome back, ${user.name}!`,
+            });
 
-          // Navigate to appropriate dashboard based on role
-          let dashboardPath = '/dashboard/user';
-          if (user.role === 'admin') {
-            dashboardPath = '/dashboard/admin';
-          } else if (user.role === 'org') {
-            dashboardPath = '/dashboard/org';
+            // Navigate to appropriate dashboard based on role
+            let dashboardPath = '/dashboard/user';
+            if (user.role === 'admin') {
+              dashboardPath = '/dashboard/admin';
+            } else if (user.role === 'org') {
+              dashboardPath = '/dashboard/org';
+            }
+
+            navigate(dashboardPath);
+          } else {
+            throw new Error(response.message || 'Login failed');
           }
-
-          navigate(dashboardPath);
-        } else {
-          throw new Error(response.message || 'Login failed');
         }
       } catch (apiError) {
         // Handle network errors specifically
@@ -87,7 +89,7 @@ const Login = () => {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center space-x-2">
+          <Link to="/" className="inline-flex items-center gap-2">
             <Coins className="h-8 w-8 text-blue-600" />
             <span className="text-2xl font-bold text-gray-900">ErthaExchange</span>
           </Link>
@@ -159,7 +161,7 @@ const Login = () => {
             </form>
 
             <div className="mt-6 text-center text-sm text-gray-600">
-              <p>Demo Accounts:</p>
+              <p>Demo Accounts (Works Offline):</p>
               <div className="mt-2 space-y-1 text-xs">
                 <p><strong>Admin:</strong> admin@erthaexchange.com / admin123</p>
                 <p><strong>Org:</strong> org@techsolutions.com / org123</p>

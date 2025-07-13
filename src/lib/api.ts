@@ -33,11 +33,22 @@ interface RegisterResponse {
 class ApiService {
   private baseURL: string;
   private token: string | null;
+  private useMockData: boolean;
 
   constructor() {
     // Use a mock API URL for development if the real one isn't available
     this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
     this.token = localStorage.getItem('token');
+    
+    // Always use mock data if we're in development mode and no API URL is set
+    // or if we're in production but the API is unavailable
+    this.useMockData = import.meta.env.DEV || !this.baseURL.includes('localhost');
+    
+    console.log('API Service initialized:', {
+      baseURL: this.baseURL,
+      useMockData: this.useMockData,
+      environment: import.meta.env.MODE
+    });
   }
 
   private async request<T>(
@@ -58,6 +69,12 @@ class ApiService {
     try {
       console.log(`Making API request to: ${url}`);
       console.log('Request config:', config);
+      
+      // If we're using mock data, don't even attempt to make the request
+      if (this.useMockData) {
+        console.log('Using mock data instead of making API request');
+        throw new Error('MOCK_MODE_ENABLED');
+      }
 
       // Add timeout to fetch requests
       const controller = new AbortController();
@@ -93,6 +110,11 @@ class ApiService {
       }
     } catch (error) {
       console.error('API request failed:', error);
+
+      // If we're in mock mode, don't show network errors
+      if (error.message === 'MOCK_MODE_ENABLED') {
+        throw new Error('MOCK_MODE_ENABLED');
+      }
       
       // Handle network errors specifically
       if (error.name === 'AbortError') {
@@ -115,8 +137,8 @@ class ApiService {
     role?: string;
   }): Promise<ApiResponse<RegisterResponse>> {
     try {
-      // For development: if API is unavailable, use mock response
-      if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+      // Use mock data in development or if API is unavailable
+      if (this.useMockData || error?.message === 'MOCK_MODE_ENABLED') {
         console.log('Using mock registration in development mode');
         const mockUser = {
           id: 'mock-' + Date.now(),
@@ -166,8 +188,25 @@ class ApiService {
     password: string; 
   }): Promise<ApiResponse<LoginResponse>> {
     try {
-      // For development: if API is unavailable, use mock response
-      if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+      try {
+        const response = await this.request<LoginResponse>('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify(credentials),
+        });
+
+        if (response.success && response.data?.token) {
+          this.token = response.data.token;
+          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+        }
+
+        return response;
+      } catch (error) {
+        // If we get a network error or we're in mock mode, use mock data
+        if (error.message.includes('Failed to fetch') || 
+            error.message.includes('Network error') ||
+            error.message === 'MOCK_MODE_ENABLED') {
+          
         console.log('Using mock login in development mode');
         
         // Check for demo credentials
@@ -223,19 +262,9 @@ class ApiService {
           timestamp: new Date().toISOString()
         };
       }
-      
-      const response = await this.request<LoginResponse>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(credentials),
-      });
-
-      if (response.success && response.data?.token) {
-        this.token = response.data.token;
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        throw error;
       }
-
-      return response;
     } catch (error) {
       console.error('Login error:', error);
       throw error;

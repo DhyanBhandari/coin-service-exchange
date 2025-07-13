@@ -67,27 +67,29 @@ const Signup = () => {
           role
         });
 
-        console.log('Registration response:', response);
+        if (response) {
+          console.log('Registration response:', response);
 
-        if (response.success && response.data) {
-          const user = response.data.user;
-          
-          toast({
-            title: "Account Created!",
-            description: `Welcome to ErthaExchange, ${user.name}!`,
-          });
+          if (response.success && response.data) {
+            const user = response.data.user;
+            
+            toast({
+              title: "Account Created!",
+              description: `Welcome to ErthaExchange, ${user.name}!`,
+            });
 
-          // Navigate to appropriate dashboard based on role
-          let dashboardPath = '/dashboard/user';
-          if (user.role === 'admin') {
-            dashboardPath = '/dashboard/admin';
-          } else if (user.role === 'org') {
-            dashboardPath = '/dashboard/org';
+            // Navigate to appropriate dashboard based on role
+            let dashboardPath = '/dashboard/user';
+            if (user.role === 'admin') {
+              dashboardPath = '/dashboard/admin';
+            } else if (user.role === 'org') {
+              dashboardPath = '/dashboard/org';
+            }
+
+            navigate(dashboardPath);
+          } else {
+            throw new Error(response.message || 'Registration failed');
           }
-
-          navigate(dashboardPath);
-        } else {
-          throw new Error(response.message || 'Registration failed');
         }
       } catch (apiError) {
         // Handle network errors specifically
@@ -124,7 +126,7 @@ const Signup = () => {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center space-x-2">
+          <Link to="/" className="inline-flex items-center gap-2">
             <Coins className="h-8 w-8 text-blue-600" />
             <span className="text-2xl font-bold text-gray-900">ErthaExchange</span>
           </Link>
@@ -261,6 +263,11 @@ const Signup = () => {
                 )}
               </Button>
             </form>
+
+            <div className="mt-6 text-center text-sm text-gray-600">
+              <p>Note: This app works offline with demo accounts.</p>
+              <p>You can create a new account or use the demo accounts from the login page.</p>
+            </div>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
