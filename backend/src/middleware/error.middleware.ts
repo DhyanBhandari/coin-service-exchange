@@ -21,7 +21,11 @@ export const errorHandler = (
     next: NextFunction
 ) => {
     // Log the error for debugging purposes
-    logger.error(error);
+    logger.error('Error occurred:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+    });
 
     // Initialize default error response values
     let statusCode = 500;

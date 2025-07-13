@@ -82,6 +82,19 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
 
+// Root route handler
+app.get('/', (req, res) => {
+    res.json(
+        createApiResponse(true, 'ErthaExchange Backend API', {
+            version: 'v1',
+            status: 'operational',
+            timestamp: new Date().toISOString(),
+            documentation: '/api',
+            health: '/health'
+        })
+    );
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json(

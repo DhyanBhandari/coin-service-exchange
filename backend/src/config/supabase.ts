@@ -32,7 +32,7 @@ export const testSupabaseConnection = async () => {
     
     const connectionPromise = supabase.from('users').select('count').limit(1);
     
-    const { data, error } = await Promise.race([connectionPromise, timeoutPromise]);
+    const { data, error } = await Promise.race([connectionPromise, timeoutPromise]) as { data: any, error: any };
     
     if (error) throw error;
     logger.info('Supabase connected successfully');
