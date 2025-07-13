@@ -27,9 +27,9 @@ export function initializeDatabase() {
 
     if (!client) { // Prevent re-initializing if already done
         client = postgres(connectionString, {
-            max: 10,
-            idle_timeout: 20,
-            connect_timeout: 30,
+            max: 5,
+            idle_timeout: 10,
+            connect_timeout: 5, // Reduced timeout for faster failure detection
             ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
         });
 
@@ -43,14 +43,32 @@ export function initializeDatabase() {
 // Export the db and client accessors
 export const getDb = () => {
     if (!db) {
-        throw new Error('Database not initialized. Call initializeDatabase() first.');
+        // Try to initialize if not already done
+        try {
+            initializeDatabase();
+            if (!db) {
+                throw new Error('Database initialization failed');
+            }
+        } catch (error) {
+            logger.error('Failed to initialize database on demand:', error);
+            throw new Error('Database connection unavailable. Please check your configuration.');
+        }
     }
     return db;
 };
 
 export const getClient = () => {
     if (!client) {
-        throw new Error('Database client not initialized. Call initializeDatabase() first.');
+        // Try to initialize if not already done
+        try {
+            initializeDatabase();
+            if (!client) {
+                throw new Error('Database client initialization failed');
+            }
+        } catch (error) {
+            logger.error('Failed to initialize database client on demand:', error);
+            throw new Error('Database connection unavailable. Please check your configuration.');
+        }
     }
     return client;
 };
@@ -61,18 +79,38 @@ export { db };
 // Test connection function
 export const testConnection = async () => {
     try {
-        const currentClient = getClient();
-        // Use a timeout for the connection test
+        // Create a separate client just for testing with a very short timeout
+        const testClient = postgres(process.env.DATABASE_URL || '', {
+            max: 1,
+            idle_timeout: 5,
+            connect_timeout: 3, // Very short timeout just for testing
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        });
+
+        // Execute a simple query with a timeout
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Connection test timeout')), 10000)
+            setTimeout(() => reject(new Error('Connection test timeout')), 5000)
         );
         
-        await Promise.race([currentClient`SELECT 1`, timeoutPromise]);
+        await Promise.race([testClient`SELECT 1`, timeoutPromise]);
+        
+        // Close the test client
+        await testClient.end();
         
         logger.info('Database connected successfully');
         return true;
     } catch (error) {
-        logger.error('Database connection failed:', error);
+        // More detailed error logging
+        if (error instanceof Error) {
+            logger.error(`Database connection failed: ${error.message}`);
+            if (error.stack) {
+                logger.debug(error.stack);
+            }
+        } else {
+            logger.error('Database connection failed with unknown error');
+        }
+        
+        // Return false but don't crash the application
         return false;
     }
 };
