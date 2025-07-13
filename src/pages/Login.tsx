@@ -22,31 +22,44 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      console.log('Attempting login with:', { email, password: '***' });
+      console.log('Attempting login with:', { 
+        email, 
+        password: '***' 
+      });
       
-      const response = await apiService.login({ email, password });
-      
-      console.log('Login response:', response);
-
-      if (response.success && response.data) {
-        const user = response.data.user;
+      try {
+        const response = await apiService.login({ email, password });
         
-        toast({
-          title: "Login Successful",
-          description: `Welcome back, ${user.name}!`,
-        });
+        console.log('Login response:', response);
 
-        // Navigate to appropriate dashboard based on role
-        let dashboardPath = '/dashboard/user';
-        if (user.role === 'admin') {
-          dashboardPath = '/dashboard/admin';
-        } else if (user.role === 'org') {
-          dashboardPath = '/dashboard/org';
+        if (response.success && response.data) {
+          const user = response.data.user;
+          
+          toast({
+            title: "Login Successful",
+            description: `Welcome back, ${user.name}!`,
+          });
+
+          // Navigate to appropriate dashboard based on role
+          let dashboardPath = '/dashboard/user';
+          if (user.role === 'admin') {
+            dashboardPath = '/dashboard/admin';
+          } else if (user.role === 'org') {
+            dashboardPath = '/dashboard/org';
+          }
+
+          navigate(dashboardPath);
+        } else {
+          throw new Error(response.message || 'Login failed');
         }
-
-        navigate(dashboardPath);
-      } else {
-        throw new Error(response.message || 'Login failed');
+      } catch (apiError) {
+        // Handle network errors specifically
+        if (apiError.message.includes('Failed to fetch') || 
+            apiError.message.includes('Network error')) {
+          console.error('Network error during login:', apiError);
+          throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+        }
+        throw apiError;
       }
     } catch (error) {
       console.error('Login error:', error);

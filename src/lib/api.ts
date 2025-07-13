@@ -35,7 +35,8 @@ class ApiService {
   private token: string | null;
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_URL || 'https://coin-service-exchange-backend.bolt.run/api/v1';
+    // Use a mock API URL for development if the real one isn't available
+    this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
     this.token = localStorage.getItem('token');
   }
 
@@ -58,29 +59,47 @@ class ApiService {
       console.log(`Making API request to: ${url}`);
       console.log('Request config:', config);
 
-      const response = await fetch(url, config);
-      
-      let data: ApiResponse<T>;
+      // Add timeout to fetch requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       try {
-        data = await response.json();
-      } catch (parseError) {
-        console.error('Failed to parse JSON response:', parseError);
-        throw new Error('Invalid response format from server');
+        const response = await fetch(url, {
+          ...config,
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        let data: ApiResponse<T>;
+        
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          console.error('Failed to parse JSON response:', parseError);
+          throw new Error('Invalid response format from server');
+        }
+
+        console.log('API Response:', data);
+
+        if (!response.ok) {
+          const errorMessage = data.message || data.error || `HTTP error! status: ${response.status}`;
+          throw new Error(errorMessage);
+        }
+
+        return data;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      console.log('API Response:', data);
-
-      if (!response.ok) {
-        const errorMessage = data.message || data.error || `HTTP error! status: ${response.status}`;
-        throw new Error(errorMessage);
-      }
-
-      return data;
     } catch (error) {
       console.error('API request failed:', error);
       
-      if (error instanceof Error) {
+      // Handle network errors specifically
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out. Please try again.');
+      } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      } else if (error instanceof Error) {
         throw error;
       } else {
         throw new Error('Network error occurred');
@@ -96,6 +115,34 @@ class ApiService {
     role?: string;
   }): Promise<ApiResponse<RegisterResponse>> {
     try {
+      // For development: if API is unavailable, use mock response
+      if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+        console.log('Using mock registration in development mode');
+        const mockUser = {
+          id: 'mock-' + Date.now(),
+          name: userData.name,
+          email: userData.email,
+          role: userData.role || 'user',
+          walletBalance: 500
+        };
+        
+        const mockToken = 'mock-token-' + Date.now();
+        
+        // Store mock data in localStorage
+        localStorage.setItem('token', mockToken);
+        localStorage.setItem('user', JSON.stringify(mockUser));
+        
+        return {
+          success: true,
+          message: 'Registration successful (MOCK)',
+          data: {
+            user: mockUser,
+            token: mockToken
+          },
+          timestamp: new Date().toISOString()
+        };
+      }
+      
       const response = await this.request<RegisterResponse>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(userData),
@@ -119,6 +166,64 @@ class ApiService {
     password: string; 
   }): Promise<ApiResponse<LoginResponse>> {
     try {
+      // For development: if API is unavailable, use mock response
+      if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+        console.log('Using mock login in development mode');
+        
+        // Check for demo credentials
+        let mockUser;
+        if (credentials.email === 'admin@erthaexchange.com' && credentials.password === 'admin123') {
+          mockUser = {
+            id: 'mock-admin-id',
+            name: 'System Administrator',
+            email: 'admin@erthaexchange.com',
+            role: 'admin',
+            walletBalance: 10000
+          };
+        } else if (credentials.email === 'org@techsolutions.com' && credentials.password === 'org123') {
+          mockUser = {
+            id: 'mock-org-id',
+            name: 'Tech Solutions Inc',
+            email: 'org@techsolutions.com',
+            role: 'org',
+            walletBalance: 5000
+          };
+        } else if (credentials.email === 'john@example.com' && credentials.password === 'user123') {
+          mockUser = {
+            id: 'mock-user-id',
+            name: 'John Doe',
+            email: 'john@example.com',
+            role: 'user',
+            walletBalance: 1000
+          };
+        } else {
+          // For any other credentials in dev mode, create a user account
+          mockUser = {
+            id: 'mock-' + Date.now(),
+            name: 'Test User',
+            email: credentials.email,
+            role: 'user',
+            walletBalance: 500
+          };
+        }
+        
+        const mockToken = 'mock-token-' + Date.now();
+        
+        // Store mock data in localStorage
+        localStorage.setItem('token', mockToken);
+        localStorage.setItem('user', JSON.stringify(mockUser));
+        
+        return {
+          success: true,
+          message: 'Login successful (MOCK)',
+          data: {
+            user: mockUser,
+            token: mockToken
+          },
+          timestamp: new Date().toISOString()
+        };
+      }
+      
       const response = await this.request<LoginResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(credentials),

@@ -52,36 +52,51 @@ const Signup = () => {
     setIsLoading(true);
 
     try {
-      console.log('Attempting registration with:', { name, email, role, password: '***' });
-      
-      const response = await apiService.register({
-        name,
-        email,
-        password,
-        role
+      console.log('Attempting registration with:', { 
+        name, 
+        email, 
+        role, 
+        password: '***' 
       });
-
-      console.log('Registration response:', response);
-
-      if (response.success && response.data) {
-        const user = response.data.user;
-        
-        toast({
-          title: "Account Created!",
-          description: `Welcome to ErthaExchange, ${user.name}!`,
+      
+      try {
+        const response = await apiService.register({
+          name,
+          email,
+          password,
+          role
         });
 
-        // Navigate to appropriate dashboard based on role
-        let dashboardPath = '/dashboard/user';
-        if (user.role === 'admin') {
-          dashboardPath = '/dashboard/admin';
-        } else if (user.role === 'org') {
-          dashboardPath = '/dashboard/org';
-        }
+        console.log('Registration response:', response);
 
-        navigate(dashboardPath);
-      } else {
-        throw new Error(response.message || 'Registration failed');
+        if (response.success && response.data) {
+          const user = response.data.user;
+          
+          toast({
+            title: "Account Created!",
+            description: `Welcome to ErthaExchange, ${user.name}!`,
+          });
+
+          // Navigate to appropriate dashboard based on role
+          let dashboardPath = '/dashboard/user';
+          if (user.role === 'admin') {
+            dashboardPath = '/dashboard/admin';
+          } else if (user.role === 'org') {
+            dashboardPath = '/dashboard/org';
+          }
+
+          navigate(dashboardPath);
+        } else {
+          throw new Error(response.message || 'Registration failed');
+        }
+      } catch (apiError) {
+        // Handle network errors specifically
+        if (apiError.message.includes('Failed to fetch') || 
+            apiError.message.includes('Network error')) {
+          console.error('Network error during registration:', apiError);
+          throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+        }
+        throw apiError;
       }
     } catch (error) {
       console.error('Registration error:', error);
