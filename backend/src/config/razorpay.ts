@@ -41,7 +41,7 @@ export const testRazorpayConnection = async () => {
             receipt: 'test_receipt_' + Date.now(),
         });
         
-        const testOrder = await Promise.race([orderPromise, timeoutPromise]);
+        const testOrder = await Promise.race([orderPromise, timeoutPromise]) as any;
         
         if (testOrder && testOrder.id) {
             logger.info('Razorpay connected successfully');
