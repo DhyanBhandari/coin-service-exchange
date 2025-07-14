@@ -1,14 +1,15 @@
 import { getDb } from '../config/database';
-import { users } from '../models/schema';
-import { eq } from 'drizzle-orm';
+import { users, passwordResetTokens } from '../models/schema';
+import { eq, and, gt } from 'drizzle-orm';
 import {
   hashPassword,
   comparePassword,
   generateToken,
   sanitizeUser,
-  createError
+  createError,
+  generatePasswordResetToken
 } from '../utils/helpers';
-import { User, NewUser } from '../models/schema';
+import { User, NewUser, NewPasswordResetToken } from '../models/schema';
 import { USER_ROLES, USER_STATUS } from '../utils/constants';
 import { AuditService } from './audit.service';
 import { logger } from '../utils/logger';
@@ -299,6 +300,148 @@ export class AuthService {
       logger.info(`User logged out: ${userId}`);
     } catch (error) {
       logger.error('Logout error:', error);
+      throw error;
+    }
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    try {
+      const db = getDb();
+
+      // Find user by email
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (!user) {
+        // Don't reveal if email exists or not for security
+        return { message: 'If the email exists, a password reset link has been sent.' };
+      }
+
+      // Check user status
+      if (user.status !== USER_STATUS.ACTIVE) {
+        throw createError(`Account is ${user.status}`, 403);
+      }
+
+      // Generate reset token
+      const resetToken = generatePasswordResetToken();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+      // Invalidate any existing tokens for this user
+      await db
+        .update(passwordResetTokens)
+        .set({ isUsed: true, updatedAt: new Date() })
+        .where(and(
+          eq(passwordResetTokens.userId, user.id),
+          eq(passwordResetTokens.isUsed, false)
+        ));
+
+      // Create new reset token
+      const newTokenData: NewPasswordResetToken = {
+        userId: user.id,
+        token: resetToken,
+        expiresAt,
+        isUsed: false
+      };
+
+      await db
+        .insert(passwordResetTokens)
+        .values(newTokenData);
+
+      // Log audit
+      await this.auditService.log({
+        userId: user.id,
+        action: 'forgot_password',
+        resource: 'user',
+        resourceId: user.id,
+        metadata: { tokenGenerated: true }
+      });
+
+      logger.info(`Password reset token generated for user: ${user.email}`);
+
+      // TODO: Send email with reset token
+      // For now, we'll just log it (in production, you'd send an email)
+      logger.info(`Password reset token for ${user.email}: ${resetToken}`);
+
+      return { message: 'If the email exists, a password reset link has been sent.' };
+    } catch (error) {
+      logger.error('Forgot password error:', error);
+      throw error;
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    try {
+      const db = getDb();
+
+      // Find valid reset token
+      const [resetTokenRecord] = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(and(
+          eq(passwordResetTokens.token, token),
+          eq(passwordResetTokens.isUsed, false),
+          gt(passwordResetTokens.expiresAt, new Date())
+        ))
+        .limit(1);
+
+      if (!resetTokenRecord) {
+        throw createError('Invalid or expired reset token', 400);
+      }
+
+      // Get user
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, resetTokenRecord.userId))
+        .limit(1);
+
+      if (!user) {
+        throw createError('User not found', 404);
+      }
+
+      // Check user status
+      if (user.status !== USER_STATUS.ACTIVE) {
+        throw createError(`Account is ${user.status}`, 403);
+      }
+
+      // Hash new password
+      const hashedNewPassword = await hashPassword(newPassword);
+
+      // Update password
+      await db
+        .update(users)
+        .set({
+          password: hashedNewPassword,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, user.id));
+
+      // Mark token as used
+      await db
+        .update(passwordResetTokens)
+        .set({
+          isUsed: true,
+          updatedAt: new Date()
+        })
+        .where(eq(passwordResetTokens.id, resetTokenRecord.id));
+
+      // Log audit
+      await this.auditService.log({
+        userId: user.id,
+        action: 'reset_password',
+        resource: 'user',
+        resourceId: user.id,
+        metadata: { passwordReset: true }
+      });
+
+      logger.info(`Password reset successful for user: ${user.email}`);
+
+      return { message: 'Password has been reset successfully.' };
+    } catch (error) {
+      logger.error('Reset password error:', error);
       throw error;
     }
   }

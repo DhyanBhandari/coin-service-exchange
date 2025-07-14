@@ -81,4 +81,24 @@ export class AuthController {
       createApiResponse(true, 'Logout successful')
     );
   });
+
+  forgotPassword = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const { email } = req.body;
+
+    const result = await this.authService.forgotPassword(email);
+
+    res.json(
+      createApiResponse(true, result.message)
+    );
+  });
+
+  resetPassword = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const { token, newPassword } = req.body;
+
+    const result = await this.authService.resetPassword(token, newPassword);
+
+    res.json(
+      createApiResponse(true, result.message)
+    );
+  });
 }

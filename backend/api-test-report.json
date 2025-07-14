@@ -1,0 +1,297 @@
+{
+  "summary": {
+    "total": 31,
+    "passed": 29,
+    "failed": 2,
+    "successRate": "93.55%",
+    "timestamp": "2025-07-13T18:46:21.046Z"
+  },
+  "testData": {
+    "tokens": {
+      "org": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4MDgzMWY0YS01NTViLTQ3NmMtYjI5Yy0xZGM1YmVhMDI3OGIiLCJyb2xlIjoib3JnIiwibWV0YWRhdGEiOnsibG9naW5UaW1lIjoiMjAyNS0wNy0xM1QxODo0NjoxNy4yNzNaIn0sImlwQWRkcmVzcyI6Ijo6MSIsInVzZXJBZ2VudCI6ImF4aW9zLzEuMTAuMCIsImlhdCI6MTc1MjQzMjM3NywiZXhwIjoxNzUzMDM3MTc3fQ.ecJNQ4YvVdUBeOykQ4gGUjRi8frPeZzKYW0LIc_u7Yc",
+      "user": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyZWU4ZTExMy1kNDBjLTQ5M2UtOTZkNS1lZDhlZWFlZjk3YWMiLCJyb2xlIjoidXNlciIsIm1ldGFkYXRhIjp7ImxvZ2luVGltZSI6IjIwMjUtMDctMTNUMTg6NDY6MTcuNzk3WiJ9LCJpcEFkZHJlc3MiOiI6OjEiLCJ1c2VyQWdlbnQiOiJheGlvcy8xLjEwLjAiLCJpYXQiOjE3NTI0MzIzNzcsImV4cCI6MTc1MzAzNzE3N30.u7u7B9xoHZNgxWCFXlqY1wyMjT_jU_0__XNvwbly5WA"
+    },
+    "users": {
+      "org": {
+        "name": "Test Organization",
+        "email": "testorg@test.com",
+        "password": "testpass123",
+        "role": "org",
+        "id": "80831f4a-555b-476c-b29c-1dc5bea0278b"
+      },
+      "user": {
+        "name": "Test User",
+        "email": "testuser@test.com",
+        "password": "testpass123",
+        "role": "user",
+        "id": "2ee8e113-d40c-493e-96d5-ed8eeaef97ac"
+      }
+    },
+    "services": {
+      "testService": {
+        "id": "43922eb0-3479-4ca5-b2ad-278b84e842ea",
+        "title": "Test Service",
+        "description": "This is a test service for API testing",
+        "price": "100.00",
+        "category": "technology",
+        "organizationId": "80831f4a-555b-476c-b29c-1dc5bea0278b",
+        "status": "pending",
+        "features": [
+          "Feature 1",
+          "Feature 2",
+          "Feature 3"
+        ],
+        "images": [],
+        "tags": [],
+        "bookings": 0,
+        "rating": "0.00",
+        "reviewCount": 0,
+        "metadata": null,
+        "createdAt": "2025-07-13T18:46:18.000Z",
+        "updatedAt": "2025-07-13T18:46:18.000Z"
+      }
+    },
+    "transactions": {},
+    "conversions": {},
+    "payments": {
+      "order": {
+        "orderId": "order_QsehzqpBUTnJTW",
+        "amount": 100,
+        "currency": "INR",
+        "receipt": "ORDER_1752432379361_7pw9v0rhr",
+        "paymentTransactionId": "67655e84-10fc-4f21-a9a2-441616e1fab3",
+        "keyId": "rzp_live_WaKo69iKB3epzi"
+      }
+    }
+  },
+  "details": [
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "message": "Server is healthy",
+      "data": {
+        "success": true,
+        "message": "Server is healthy",
+        "timestamp": "2025-07-13T18:46:15.488Z",
+        "data": {
+          "status": "healthy",
+          "timestamp": "2025-07-13T18:46:15.487Z",
+          "uptime": 553.1985662,
+          "environment": "development",
+          "version": "1.0.0"
+        }
+      },
+      "timestamp": "2025-07-13T18:46:15.489Z"
+    },
+    {
+      "test": "Register admin",
+      "status": "FAIL",
+      "message": "Registration failed: Validation error",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:15.542Z"
+    },
+    {
+      "test": "Register org",
+      "status": "PASS",
+      "message": "org registered successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:16.342Z"
+    },
+    {
+      "test": "Register user",
+      "status": "PASS",
+      "message": "user registered successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:16.823Z"
+    },
+    {
+      "test": "Login org",
+      "status": "PASS",
+      "message": "org login successful",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:17.324Z"
+    },
+    {
+      "test": "Login user",
+      "status": "PASS",
+      "message": "user login successful",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:17.849Z"
+    },
+    {
+      "test": "Get org Profile",
+      "status": "PASS",
+      "message": "Profile retrieved successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:17.904Z"
+    },
+    {
+      "test": "Update org Profile",
+      "status": "PASS",
+      "message": "Profile updated successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.113Z"
+    },
+    {
+      "test": "Get user Profile",
+      "status": "PASS",
+      "message": "Profile retrieved successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.168Z"
+    },
+    {
+      "test": "Update user Profile",
+      "status": "PASS",
+      "message": "Profile updated successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.374Z"
+    },
+    {
+      "test": "Get user Wallet",
+      "status": "PASS",
+      "message": "Wallet balance: 0.00",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.427Z"
+    },
+    {
+      "test": "Get org Wallet",
+      "status": "PASS",
+      "message": "Wallet balance: 0.00",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.481Z"
+    },
+    {
+      "test": "Create Service",
+      "status": "PASS",
+      "message": "Service created successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.658Z"
+    },
+    {
+      "test": "Get Services",
+      "status": "PASS",
+      "message": "Retrieved 5 services",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.748Z"
+    },
+    {
+      "test": "Get Service By ID",
+      "status": "PASS",
+      "message": "Service retrieved successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:18.802Z"
+    },
+    {
+      "test": "Update Service",
+      "status": "PASS",
+      "message": "Service updated successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:19.015Z"
+    },
+    {
+      "test": "Add Service Review",
+      "status": "PASS",
+      "message": "Review added successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:19.307Z"
+    },
+    {
+      "test": "Create Payment Order",
+      "status": "PASS",
+      "message": "Payment order created successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:19.683Z"
+    },
+    {
+      "test": "Payment Verify Endpoint",
+      "status": "PASS",
+      "message": "Endpoint accessible (invalid signature expected)",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:19.743Z"
+    },
+    {
+      "test": "Get user Transactions",
+      "status": "PASS",
+      "message": "Retrieved 0 transactions",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:19.894Z"
+    },
+    {
+      "test": "Get user Transaction Stats",
+      "status": "PASS",
+      "message": "Transaction stats retrieved successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:19.990Z"
+    },
+    {
+      "test": "Get org Transactions",
+      "status": "PASS",
+      "message": "Retrieved 0 transactions",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.129Z"
+    },
+    {
+      "test": "Get org Transaction Stats",
+      "status": "PASS",
+      "message": "Transaction stats retrieved successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.225Z"
+    },
+    {
+      "test": "Create Conversion Request",
+      "status": "FAIL",
+      "message": "Failed to create conversion: Insufficient wallet balance",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.391Z"
+    },
+    {
+      "test": "Get Conversion Requests",
+      "status": "PASS",
+      "message": "Retrieved 0 conversion requests",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.543Z"
+    },
+    {
+      "test": "No Token Protection",
+      "status": "PASS",
+      "message": "Protected endpoint correctly rejects requests without token",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.550Z"
+    },
+    {
+      "test": "Invalid Token Protection",
+      "status": "PASS",
+      "message": "Protected endpoint correctly rejects invalid tokens",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.561Z"
+    },
+    {
+      "test": "Role-based Access Control",
+      "status": "PASS",
+      "message": "Role-based access control working correctly",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.619Z"
+    },
+    {
+      "test": "Cleanup Service",
+      "status": "PASS",
+      "message": "Test service deleted successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.825Z"
+    },
+    {
+      "test": "Logout org",
+      "status": "PASS",
+      "message": "org logged out successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:20.932Z"
+    },
+    {
+      "test": "Logout user",
+      "status": "PASS",
+      "message": "user logged out successfully",
+      "data": null,
+      "timestamp": "2025-07-13T18:46:21.045Z"
+    }
+  ]
+}

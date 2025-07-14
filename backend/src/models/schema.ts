@@ -215,6 +215,21 @@ export const apiKeys = pgTable('api_keys', {
   keyIdx: uniqueIndex('api_keys_key_idx').on(table.key),
 }));
 
+// Password reset tokens table
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  isUsed: boolean('is_used').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow()
+}, (table) => ({
+  userIdx: index('password_reset_tokens_user_idx').on(table.userId),
+  tokenIdx: uniqueIndex('password_reset_tokens_token_idx').on(table.token),
+  expiresAtIdx: index('password_reset_tokens_expires_at_idx').on(table.expiresAt),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   services: many(services),
@@ -225,6 +240,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   serviceReviews: many(serviceReviews),
   auditLogs: many(auditLogs),
   apiKeys: many(apiKeys),
+  passwordResetTokens: many(passwordResetTokens),
 }));
 
 export const servicesRelations = relations(services, ({ one, many }) => ({
@@ -306,6 +322,13 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   }),
 }));
 
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [passwordResetTokens.userId],
+    references: [users.id]
+  }),
+}));
+
 // Export types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -325,3 +348,5 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;

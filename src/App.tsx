@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -26,6 +27,10 @@ import EventPasses from "./pages/services/EventPasses";
 import NotFound from "./pages/NotFound";
 import Payment from "./pages/Payment";
 import Feedback from "./pages/Feedback";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import RedirectIfLoggedIn from "@/components/RedirectIfLoggedIn";
 
 const queryClient = new QueryClient();
 
@@ -36,12 +41,30 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+          <Route
+            path="/login"
+            element={
+              <RedirectIfLoggedIn>
+                <Login />
+              </RedirectIfLoggedIn>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <RedirectIfLoggedIn>
+                <Signup />
+              </RedirectIfLoggedIn>
+            }
+          />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+<Route path="/reset-password/:token" element={<ResetPassword />} />
+
           <Route path="/payment" element={<Payment />} />
           <Route path="/feedback" element={<Feedback />} />
-          
+
           {/* Service Detail Pages */}
           <Route path="/services/living-spaces" element={<LivingSpaces />} />
           <Route path="/services/sustainable-trips" element={<SustainableTrips />} />
@@ -49,24 +72,102 @@ const App = () => (
           <Route path="/services/tech-services" element={<TechServices />} />
           <Route path="/services/startup-events" element={<StartupEvents />} />
           <Route path="/services/event-passes" element={<EventPasses />} />
-          
-          {/* User Routes */}
-          <Route path="/dashboard/user" element={<UserDashboard />} />
-          <Route path="/wallet/add" element={<AddCoins />} />
-          <Route path="/services" element={<BrowseServices />} />
-          <Route path="/transactions" element={<UserTransactions />} />
-          
-          {/* Organization Routes */}
-          <Route path="/dashboard/org" element={<OrgDashboard />} />
-          <Route path="/org/services" element={<OrgServices />} />
-          <Route path="/org/convert" element={<OrgConvert />} />
-          
-          {/* Admin Routes */}
-          <Route path="/dashboard/admin" element={<AdminDashboard />} />
-          <Route path="/admin/users" element={<AdminUsers />} />
-          <Route path="/admin/services" element={<AdminServices />} />
-          <Route path="/admin/conversions" element={<AdminConversions />} />
-          
+
+          {/* Protected User Routes */}
+          <Route
+            path="/dashboard/user"
+            element={
+              <ProtectedRoute allowedRoles="user">
+                <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wallet/add"
+            element={
+              <ProtectedRoute allowedRoles="user">
+                <AddCoins />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/services"
+            element={
+              <ProtectedRoute allowedRoles="user">
+                <BrowseServices />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <ProtectedRoute allowedRoles="user">
+                <UserTransactions />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Org Routes */}
+          <Route
+            path="/dashboard/org"
+            element={
+              <ProtectedRoute allowedRoles="org">
+                <OrgDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/org/services"
+            element={
+              <ProtectedRoute allowedRoles="org">
+                <OrgServices />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/org/convert"
+            element={
+              <ProtectedRoute allowedRoles="org">
+                <OrgConvert />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Admin Routes */}
+          <Route
+            path="/dashboard/admin"
+            element={
+              <ProtectedRoute allowedRoles="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles="admin">
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/services"
+            element={
+              <ProtectedRoute allowedRoles="admin">
+                <AdminServices />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/conversions"
+            element={
+              <ProtectedRoute allowedRoles="admin">
+                <AdminConversions />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 404 Route */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

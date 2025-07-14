@@ -138,7 +138,7 @@ class ApiService {
   }): Promise<ApiResponse<RegisterResponse>> {
     try {
       // Use mock data in development or if API is unavailable
-      if (this.useMockData || error?.message === 'MOCK_MODE_ENABLED') {
+      if (this.useMockData) {
         console.log('Using mock registration in development mode');
         const mockUser = {
           id: 'mock-' + Date.now(),

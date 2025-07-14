@@ -245,3 +245,10 @@ export const generateRandomString = (length: number): string => {
     }
     return result;
 };
+
+/**
+ * Generate password reset token.
+ */
+export const generatePasswordResetToken = (): string => {
+    return generateRandomString(32);
+};
