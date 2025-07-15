@@ -2,13 +2,14 @@
 import { getDb } from '../config/database';
 import { auditLogs } from '../models/schema';
 import { NewAuditLog, AuditLog } from '../models/schema';
+import helpers from '../utils/helpers';
 import { eq, desc, and, gte, lte } from 'drizzle-orm';
-import { AuditLogData, PaginationParams, PaginatedResponse } from '../types';
-import { calculatePagination } from '../utils/helpers';
+import { AuditLogData, AuditLogResponse, PaginationParams, PaginatedResponse, PaginationInfo } from '../types';
+
 import { logger } from '../utils/logger';
 
 export class AuditService {
-  async log(data: AuditLogData): Promise<AuditLog> {
+  async log(data: AuditLogData): Promise<AuditLogResponse> {
     try {
       const db = getDb();
       const auditData: NewAuditLog = {
@@ -32,7 +33,7 @@ export class AuditService {
         throw new Error('Failed to create audit log');
       }
 
-      return newAuditLog;
+      return newAuditLog as AuditLogResponse;
     } catch (error) {
       logger.error('Audit log error:', error);
       throw error;
@@ -41,14 +42,14 @@ export class AuditService {
 
   async getAuditLogs(
     filters: {
-      userId?: string;
+      userId?: number;
       action?: string;
       resource?: string;
       startDate?: string;
       endDate?: string;
     } = {},
     pagination: PaginationParams
-  ): Promise<PaginatedResponse<AuditLog>> {
+  ): Promise<PaginatedResponse<AuditLogResponse>> {
     try {
       const db = getDb();
       // Apply filters
@@ -92,9 +93,18 @@ export class AuditService {
         .limit(pagination.limit)
         .offset(offset);
 
+      const totalPages = Math.ceil(total / pagination.limit);
+      
       return {
-        data,
-        pagination: calculatePagination(pagination.page, pagination.limit, total)
+        data: data as AuditLogResponse[],
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          totalPages,
+          hasNext: pagination.page < totalPages,
+          hasPrev: pagination.page > 1
+        } as PaginationInfo
       };
     } catch (error) {
       logger.error('Get audit logs error:', error);
@@ -102,7 +112,7 @@ export class AuditService {
     }
   }
 
-  async getAuditLogById(id: string): Promise<AuditLog | null> {
+  async getAuditLogById(id: string): Promise<AuditLogResponse | null> {
     try {
       const db = getDb();
       const [auditLog] = await db
@@ -111,14 +121,14 @@ export class AuditService {
         .where(eq(auditLogs.id, id))
         .limit(1);
 
-      return auditLog || null;
+      return (auditLog as AuditLogResponse) || null;
     } catch (error) {
       logger.error('Get audit log by ID error:', error);
       throw error;
     }
   }
 
-  async getActivitySummary(userId: string, days: number = 30): Promise<any> {
+  async getActivitySummary(userId: number, days: number = 30): Promise<any> {
     try {
       const db = getDb();
       const startDate = new Date();
@@ -153,3 +163,21 @@ export class AuditService {
     }
   }
 }
+
+// Create a singleton instance for convenience
+const auditService = new AuditService();
+
+// Export a convenience function that matches the expected interface
+export const logActivity = async (
+  userId: number,
+  action: string,
+  resource: string,
+  metadata?: any
+): Promise<AuditLogResponse> => {
+  return auditService.log({
+    userId,
+    action,
+    resource,
+    metadata
+  });
+};

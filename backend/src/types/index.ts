@@ -113,7 +113,7 @@ export interface NotificationData {
 }
 
 export interface AuditLogData {
-  userId?: string;
+  userId?: number;
   action: string;
   resource: string;
   resourceId?: string;
@@ -122,6 +122,31 @@ export interface AuditLogData {
   ipAddress?: string;
   userAgent?: string;
   metadata?: Record<string, any>;
+}
+
+export interface AuditLogResponse {
+  id: string;
+  userId: number | null;
+  sessionId: string | null;
+  action: string;
+  resource: string;
+  resourceId: string | null;
+  method: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  duration: number | null;
+  oldValues: Record<string, any> | null;
+  newValues: Record<string, any> | null;
+  changes: Record<string, any> | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  location: Record<string, any> | null;
+  deviceInfo: Record<string, any> | null;
+  severity: string | null;
+  category: string | null;
+  tags: string[] | null;
+  metadata: Record<string, any> | null;
+  createdAt: Date | null;
 }
 
 export interface FileUploadData {

@@ -1,238 +1,768 @@
-import { pgTable, text, integer, timestamp, boolean, json, decimal, uuid, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, timestamp, boolean, json, decimal, uuid, index, uniqueIndex, serial, varchar, jsonb, foreignKey, interval } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Users table
+// Users table - Updated to support Firebase authentication
 export const users = pgTable('users', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  email: text('email').notNull().unique(),
-  password: text('password').notNull(),
-  name: text('name').notNull(),
-  role: text('role').notNull().default('user'), // user, org, admin
-  walletBalance: decimal('wallet_balance', { precision: 12, scale: 2 }).notNull().default('0'),
-  status: text('status').notNull().default('active'), // active, suspended, inactive
-  emailVerified: boolean('email_verified').notNull().default(false),
+  id: serial('id').primaryKey(),
+  firebaseUid: varchar('firebase_uid', { length: 128 }).unique(), // Firebase UID
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: varchar('password_hash', { length: 255 }), // Optional for Firebase users
+  name: varchar('name', { length: 100 }).notNull(),
+  role: varchar('role', { length: 20 }).notNull().default('user'), // 'user', 'org', 'admin'
+  walletBalance: decimal('wallet_balance', { precision: 10, scale: 2 }).default('0.00'),
+  emailVerified: boolean('email_verified').default(false),
+  isActive: boolean('is_active').default(true),
+  phone: varchar('phone', { length: 20 }),
+  address: text('address'),
   profileImage: text('profile_image'),
-  phone: text('phone'),
-  address: json('address').$type<{
-    street?: string;
-    city?: string;
-    state?: string;
-    country?: string;
-    zipCode?: string;
-  }>(),
-  preferences: json('preferences').$type<{
-    notifications?: boolean;
-    newsletter?: boolean;
-    language?: string;
-  }>().default({}),
+  dateOfBirth: timestamp('date_of_birth'),
+  preferences: jsonb('preferences'),
   lastLoginAt: timestamp('last_login_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
-  emailIdx: uniqueIndex('users_email_idx').on(table.email),
+  emailIdx: index('users_email_idx').on(table.email),
+  firebaseUidIdx: index('users_firebase_uid_idx').on(table.firebaseUid),
   roleIdx: index('users_role_idx').on(table.role),
-  statusIdx: index('users_status_idx').on(table.status),
+  isActiveIdx: index('users_is_active_idx').on(table.isActive),
 }));
 
-// Services table
+// Services table - Enhanced with more fields
 export const services = pgTable('services', {
   id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: integer('organization_id').notNull(),
   title: text('title').notNull(),
   description: text('description').notNull(),
-  price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+  shortDescription: text('short_description'),
   category: text('category').notNull(),
-  organizationId: uuid('organization_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  status: text('status').notNull().default('pending'), // active, inactive, pending, suspended
-  features: json('features').$type<string[]>().notNull().default([]),
-  images: json('images').$type<string[]>().default([]),
+  subCategory: text('sub_category'),
+  price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+  originalPrice: decimal('original_price', { precision: 10, scale: 2 }),
+  currency: varchar('currency', { length: 3 }).default('INR'),
+  location: text('location'),
+  city: varchar('city', { length: 100 }),
+  state: varchar('state', { length: 100 }),
+  country: varchar('country', { length: 100 }).default('India'),
+  coordinates: jsonb('coordinates'), // {lat: number, lng: number}
+  duration: varchar('duration', { length: 100 }),
+  capacity: integer('capacity'),
+  minBookings: integer('min_bookings').default(1),
+  maxBookings: integer('max_bookings'),
+  availableSlots: integer('available_slots'),
   tags: json('tags').$type<string[]>().default([]),
-  bookings: integer('bookings').notNull().default(0),
-  rating: decimal('rating', { precision: 3, scale: 2 }).default('0'),
-  reviewCount: integer('review_count').notNull().default(0),
-  metadata: json('metadata').$type<Record<string, any>>(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  features: json('features').$type<string[]>().default([]),
+  inclusions: json('inclusions').$type<string[]>().default([]),
+  exclusions: json('exclusions').$type<string[]>().default([]),
+  images: json('images').$type<string[]>().default([]),
+  videos: json('videos').$type<string[]>().default([]),
+  documents: json('documents').$type<string[]>().default([]),
+  rating: decimal('rating', { precision: 3, scale: 2 }).default('0.00'),
+  reviewCount: integer('review_count').default(0),
+  bookingCount: integer('booking_count').default(0),
+  viewCount: integer('view_count').default(0),
+  favoriteCount: integer('favorite_count').default(0),
+  status: text('status').default('pending'), // 'pending', 'approved', 'rejected', 'suspended', 'draft'
+  isActive: boolean('is_active').default(true),
+  isFeatured: boolean('is_featured').default(false),
+  isPromoted: boolean('is_promoted').default(false),
+  availableFrom: timestamp('available_from'),
+  availableTo: timestamp('available_to'),
+  availabilitySchedule: jsonb('availability_schedule'), // Flexible schedule data
+  maxBookingsPerUser: integer('max_bookings_per_user').default(1),
+  cancellationPolicy: text('cancellation_policy'),
+  refundPolicy: text('refund_policy'),
+  termsAndConditions: text('terms_and_conditions'),
+  requirements: text('requirements'),
+  ageRestriction: integer('age_restriction'),
+  skillLevel: varchar('skill_level', { length: 50 }), // beginner, intermediate, advanced
+  language: varchar('language', { length: 50 }).default('English'),
+  contactInfo: jsonb('contact_info'),
+  metadata: jsonb('metadata'),
+  seoTitle: text('seo_title'),
+  seoDescription: text('seo_description'),
+  seoKeywords: json('seo_keywords').$type<string[]>().default([]),
+  adminNotes: text('admin_notes'),
+  approvedBy: integer('approved_by'),
+  approvedAt: timestamp('approved_at'),
+  rejectionReason: text('rejection_reason'),
+  lastModifiedBy: integer('last_modified_by'),
+  publishedAt: timestamp('published_at'),
+  archivedAt: timestamp('archived_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
-  orgIdx: index('services_org_idx').on(table.organizationId),
+  organizationIdx: index('services_organization_idx').on(table.organizationId),
   categoryIdx: index('services_category_idx').on(table.category),
+  subCategoryIdx: index('services_sub_category_idx').on(table.subCategory),
   statusIdx: index('services_status_idx').on(table.status),
+  priceIdx: index('services_price_idx').on(table.price),
+  locationIdx: index('services_location_idx').on(table.location),
+  cityIdx: index('services_city_idx').on(table.city),
+  isActiveIdx: index('services_is_active_idx').on(table.isActive),
+  isFeaturedIdx: index('services_is_featured_idx').on(table.isFeatured),
+  ratingIdx: index('services_rating_idx').on(table.rating),
   createdAtIdx: index('services_created_at_idx').on(table.createdAt),
+  availabilityIdx: index('services_availability_idx').on(table.availableFrom, table.availableTo),
+  
+  organizationFk: foreignKey({
+    columns: [table.organizationId],
+    foreignColumns: [users.id],
+    name: 'services_organization_fk'
+  }),
+  approvedByFk: foreignKey({
+    columns: [table.approvedBy],
+    foreignColumns: [users.id],
+    name: 'services_approved_by_fk'
+  }),
+  lastModifiedByFk: foreignKey({
+    columns: [table.lastModifiedBy],
+    foreignColumns: [users.id],
+    name: 'services_last_modified_by_fk'
+  }),
 }));
 
-// Transactions table
+// Service bookings table
+export const serviceBookings = pgTable('service_bookings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  serviceId: uuid('service_id').notNull(),
+  userId: integer('user_id').notNull(),
+  bookingReference: varchar('booking_reference', { length: 50 }).unique(),
+  quantity: integer('quantity').default(1),
+  totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
+  originalAmount: decimal('original_amount', { precision: 12, scale: 2 }),
+  discountAmount: decimal('discount_amount', { precision: 12, scale: 2 }).default('0.00'),
+  taxAmount: decimal('tax_amount', { precision: 12, scale: 2 }).default('0.00'),
+  processingFee: decimal('processing_fee', { precision: 12, scale: 2 }).default('0.00'),
+  currency: varchar('currency', { length: 3 }).default('INR'),
+  status: text('status').default('pending'), // 'pending', 'confirmed', 'cancelled', 'completed', 'refunded'
+  paymentStatus: text('payment_status').default('pending'), // 'pending', 'paid', 'failed', 'refunded'
+  bookingDate: timestamp('booking_date'),
+  serviceDate: timestamp('service_date'),
+  checkinDate: timestamp('checkin_date'),
+  checkoutDate: timestamp('checkout_date'),
+  guestDetails: jsonb('guest_details'),
+  specialRequests: text('special_requests'),
+  notes: text('notes'),
+  contactInfo: jsonb('contact_info'),
+  cancellationReason: text('cancellation_reason'),
+  cancelledAt: timestamp('cancelled_at'),
+  cancelledBy: integer('cancelled_by'),
+  refundAmount: decimal('refund_amount', { precision: 12, scale: 2 }),
+  refundReason: text('refund_reason'),
+  refundedAt: timestamp('refunded_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  serviceIdx: index('service_bookings_service_idx').on(table.serviceId),
+  userIdx: index('service_bookings_user_idx').on(table.userId),
+  statusIdx: index('service_bookings_status_idx').on(table.status),
+  paymentStatusIdx: index('service_bookings_payment_status_idx').on(table.paymentStatus),
+  bookingRefIdx: uniqueIndex('service_bookings_ref_idx').on(table.bookingReference),
+  serviceDateIdx: index('service_bookings_service_date_idx').on(table.serviceDate),
+  createdAtIdx: index('service_bookings_created_at_idx').on(table.createdAt),
+  
+  serviceFk: foreignKey({
+    columns: [table.serviceId],
+    foreignColumns: [services.id],
+    name: 'service_bookings_service_fk'
+  }),
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'service_bookings_user_fk'
+  }),
+  cancelledByFk: foreignKey({
+    columns: [table.cancelledBy],
+    foreignColumns: [users.id],
+    name: 'service_bookings_cancelled_by_fk'
+  }),
+}));
+
+// Transactions table - Enhanced
 export const transactions = pgTable('transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
-  type: text('type').notNull(), // coin_purchase, service_booking, coin_conversion, refund
+  userId: integer('user_id').notNull(),
+  serviceId: uuid('service_id'),
+  bookingId: uuid('booking_id'),
+  type: text('type').notNull(), // 'credit', 'debit', 'coin_purchase', 'service_booking', 'conversion', 'refund', 'cashback', 'penalty'
+  subType: text('sub_type'), // Additional categorization
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
-  status: text('status').notNull().default('pending'), // pending, completed, failed, cancelled
+  coinAmount: decimal('coin_amount', { precision: 12, scale: 2 }),
+  fiatAmount: decimal('fiat_amount', { precision: 12, scale: 2 }),
+  currency: varchar('currency', { length: 3 }).default('INR'),
+  exchangeRate: decimal('exchange_rate', { precision: 10, scale: 4 }),
   description: text('description').notNull(),
-  metadata: json('metadata').$type<Record<string, any>>(),
+  status: text('status').default('pending'), // 'pending', 'processing', 'completed', 'failed', 'cancelled', 'reversed'
+  referenceId: varchar('reference_id', { length: 100 }),
+  referenceType: varchar('reference_type', { length: 50 }),
   paymentId: text('payment_id'),
   paymentMethod: text('payment_method'),
+  paymentProvider: text('payment_provider'),
   balanceBefore: decimal('balance_before', { precision: 12, scale: 2 }),
   balanceAfter: decimal('balance_after', { precision: 12, scale: 2 }),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  fees: decimal('fees', { precision: 12, scale: 2 }).default('0.00'),
+  taxes: decimal('taxes', { precision: 12, scale: 2 }).default('0.00'),
+  processedAt: timestamp('processed_at'),
+  processedBy: integer('processed_by'),
+  failureReason: text('failure_reason'),
+  retryCount: integer('retry_count').default(0),
+  metadata: jsonb('metadata'),
+  tags: json('tags').$type<string[]>().default([]),
+  isReversible: boolean('is_reversible').default(true),
+  reversedTransactionId: uuid('reversed_transaction_id'),
+  parentTransactionId: uuid('parent_transaction_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdx: index('transactions_user_idx').on(table.userId),
   serviceIdx: index('transactions_service_idx').on(table.serviceId),
+  bookingIdx: index('transactions_booking_idx').on(table.bookingId),
   typeIdx: index('transactions_type_idx').on(table.type),
   statusIdx: index('transactions_status_idx').on(table.status),
+  referenceIdx: index('transactions_reference_idx').on(table.referenceId),
+  paymentIdx: index('transactions_payment_idx').on(table.paymentId),
   createdAtIdx: index('transactions_created_at_idx').on(table.createdAt),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'transactions_user_fk'
+  }),
+  serviceFk: foreignKey({
+    columns: [table.serviceId],
+    foreignColumns: [services.id],
+    name: 'transactions_service_fk'
+  }),
+  bookingFk: foreignKey({
+    columns: [table.bookingId],
+    foreignColumns: [serviceBookings.id],
+    name: 'transactions_booking_fk'
+  }),
+  processedByFk: foreignKey({
+    columns: [table.processedBy],
+    foreignColumns: [users.id],
+    name: 'transactions_processed_by_fk'
+  }),
 }));
 
 // Conversion requests table
 export const conversionRequests = pgTable('conversion_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: uuid('organization_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: integer('organization_id').notNull(),
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
-  currency: text('currency').notNull().default('INR'),
-  status: text('status').notNull().default('pending'), // pending, approved, rejected, processed
+  currency: text('currency').default('INR'),
+  exchangeRate: decimal('exchange_rate', { precision: 10, scale: 4 }),
+  convertedAmount: decimal('converted_amount', { precision: 12, scale: 2 }),
+  status: text('status').default('pending'), // 'pending', 'approved', 'rejected', 'processing', 'completed', 'cancelled'
+  priority: text('priority').default('normal'), // 'low', 'normal', 'high', 'urgent'
   reason: text('reason'),
-  processedBy: uuid('processed_by').references(() => users.id, { onDelete: 'set null' }),
+  adminNotes: text('admin_notes'),
+  processedBy: integer('processed_by'),
   processedAt: timestamp('processed_at'),
-  bankDetails: json('bank_details').$type<{
-    accountNumber?: string;
-    ifscCode?: string;
-    accountHolderName?: string;
-    bankName?: string;
-  }>(),
+  bankDetails: jsonb('bank_details'),
   transactionId: text('transaction_id'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  paymentReference: text('payment_reference'),
+  fees: decimal('fees', { precision: 12, scale: 2 }).default('0.00'),
+  taxes: decimal('taxes', { precision: 12, scale: 2 }).default('0.00'),
+  expectedProcessingTime: text('expected_processing_time'),
+  actualProcessingTime: interval('actual_processing_time'),
+  attachments: json('attachments').$type<string[]>().default([]),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
-  orgIdx: index('conversion_requests_org_idx').on(table.organizationId),
+  organizationIdx: index('conversion_requests_organization_idx').on(table.organizationId),
   statusIdx: index('conversion_requests_status_idx').on(table.status),
+  priorityIdx: index('conversion_requests_priority_idx').on(table.priority),
   createdAtIdx: index('conversion_requests_created_at_idx').on(table.createdAt),
+  
+  organizationFk: foreignKey({
+    columns: [table.organizationId],
+    foreignColumns: [users.id],
+    name: 'conversion_requests_organization_fk'
+  }),
+  processedByFk: foreignKey({
+    columns: [table.processedBy],
+    foreignColumns: [users.id],
+    name: 'conversion_requests_processed_by_fk'
+  }),
 }));
 
 // Payment methods table
 export const paymentMethods = pgTable('payment_methods', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  type: text('type').notNull(), // card, upi, wallet, netbanking
-  provider: text('provider').notNull(), // razorpay, gpay, paytm, etc.
-  isDefault: boolean('is_default').notNull().default(false),
-  details: json('details').$type<{
-    last4?: string;
-    cardType?: string;
-    upiId?: string;
-    walletProvider?: string;
-    holderName?: string;
-    expiryMonth?: string;
-    expiryYear?: string;
-  }>(),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  userId: integer('user_id').notNull(),
+  type: text('type').notNull(), // 'card', 'upi', 'wallet', 'netbanking', 'emi'
+  provider: text('provider').notNull(), // 'razorpay', 'gpay', 'paytm', 'phonepe', etc.
+  isDefault: boolean('is_default').default(false),
+  nickname: varchar('nickname', { length: 100 }),
+  details: jsonb('details'),
+  securityInfo: jsonb('security_info'), // Encrypted sensitive data
+  isActive: boolean('is_active').default(true),
+  isVerified: boolean('is_verified').default(false),
+  verifiedAt: timestamp('verified_at'),
+  lastUsedAt: timestamp('last_used_at'),
+  expiresAt: timestamp('expires_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdx: index('payment_methods_user_idx').on(table.userId),
   typeIdx: index('payment_methods_type_idx').on(table.type),
+  providerIdx: index('payment_methods_provider_idx').on(table.provider),
+  isActiveIdx: index('payment_methods_is_active_idx').on(table.isActive),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'payment_methods_user_fk'
+  }),
 }));
 
 // Payment transactions table
 export const paymentTransactions = pgTable('payment_transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  transactionId: uuid('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
-  paymentMethodId: uuid('payment_method_id').references(() => paymentMethods.id, { onDelete: 'set null' }),
+  userId: integer('user_id').notNull(),
+  transactionId: uuid('transaction_id'),
+  paymentMethodId: uuid('payment_method_id'),
+  bookingId: uuid('booking_id'),
   razorpayOrderId: text('razorpay_order_id'),
   razorpayPaymentId: text('razorpay_payment_id'),
   razorpaySignature: text('razorpay_signature'),
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
-  currency: text('currency').notNull().default('INR'),
-  status: text('status').notNull().default('pending'), // pending, processing, completed, failed, cancelled
+  currency: text('currency').default('INR'),
+  status: text('status').default('pending'), // 'pending', 'processing', 'completed', 'failed', 'cancelled', 'expired'
   paymentMethod: text('payment_method').notNull(),
   provider: text('provider'),
-  gateway: text('gateway').notNull().default('razorpay'),
-  gatewayResponse: json('gateway_response'),
+  gateway: text('gateway').default('razorpay'),
+  gatewayOrderId: text('gateway_order_id'),
+  gatewayPaymentId: text('gateway_payment_id'),
+  gatewayResponse: jsonb('gateway_response'),
+  gatewayFee: decimal('gateway_fee', { precision: 12, scale: 2 }).default('0.00'),
+  platformFee: decimal('platform_fee', { precision: 12, scale: 2 }).default('0.00'),
+  taxes: decimal('taxes', { precision: 12, scale: 2 }).default('0.00'),
+  netAmount: decimal('net_amount', { precision: 12, scale: 2 }),
   failureReason: text('failure_reason'),
+  failureCode: text('failure_code'),
+  retryCount: integer('retry_count').default(0),
   refundId: text('refund_id'),
   refundAmount: decimal('refund_amount', { precision: 12, scale: 2 }),
-  refundStatus: text('refund_status'), // pending, processed, failed
-  metadata: json('metadata').$type<Record<string, any>>(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  refundStatus: text('refund_status'), // 'pending', 'processing', 'completed', 'failed'
+  refundReason: text('refund_reason'),
+  refundedAt: timestamp('refunded_at'),
+  capturedAt: timestamp('captured_at'),
+  settledAt: timestamp('settled_at'),
+  metadata: jsonb('metadata'),
+  webhookData: jsonb('webhook_data'),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  deviceFingerprint: text('device_fingerprint'),
+  riskScore: decimal('risk_score', { precision: 5, scale: 2 }),
+  fraudFlags: json('fraud_flags').$type<string[]>().default([]),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdx: index('payment_transactions_user_idx').on(table.userId),
-  razorpayOrderIdx: index('payment_transactions_order_idx').on(table.razorpayOrderId),
+  transactionIdx: index('payment_transactions_transaction_idx').on(table.transactionId),
+  bookingIdx: index('payment_transactions_booking_idx').on(table.bookingId),
+  razorpayOrderIdx: index('payment_transactions_razorpay_order_idx').on(table.razorpayOrderId),
+  razorpayPaymentIdx: index('payment_transactions_razorpay_payment_idx').on(table.razorpayPaymentId),
   statusIdx: index('payment_transactions_status_idx').on(table.status),
+  gatewayIdx: index('payment_transactions_gateway_idx').on(table.gateway),
   createdAtIdx: index('payment_transactions_created_at_idx').on(table.createdAt),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'payment_transactions_user_fk'
+  }),
+  transactionFk: foreignKey({
+    columns: [table.transactionId],
+    foreignColumns: [transactions.id],
+    name: 'payment_transactions_transaction_fk'
+  }),
+  paymentMethodFk: foreignKey({
+    columns: [table.paymentMethodId],
+    foreignColumns: [paymentMethods.id],
+    name: 'payment_transactions_payment_method_fk'
+  }),
+  bookingFk: foreignKey({
+    columns: [table.bookingId],
+    foreignColumns: [serviceBookings.id],
+    name: 'payment_transactions_booking_fk'
+  }),
 }));
 
 // Service reviews table
 export const serviceReviews = pgTable('service_reviews', {
   id: uuid('id').defaultRandom().primaryKey(),
-  serviceId: uuid('service_id').notNull().references(() => services.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  serviceId: uuid('service_id').notNull(),
+  userId: integer('user_id').notNull(),
+  bookingId: uuid('booking_id'),
   rating: integer('rating').notNull(), // 1-5
+  title: varchar('title', { length: 200 }),
   review: text('review'),
-  isVisible: boolean('is_visible').notNull().default(true),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  pros: json('pros').$type<string[]>().default([]),
+  cons: json('cons').$type<string[]>().default([]),
+  images: json('images').$type<string[]>().default([]),
+  videos: json('videos').$type<string[]>().default([]),
+  tags: json('tags').$type<string[]>().default([]),
+  isAnonymous: boolean('is_anonymous').default(false),
+  isVerified: boolean('is_verified').default(false),
+  isVisible: boolean('is_visible').default(true),
+  isFeatured: boolean('is_featured').default(false),
+  helpfulVotes: integer('helpful_votes').default(0),
+  reportCount: integer('report_count').default(0),
+  moderatedBy: integer('moderated_by'),
+  moderatedAt: timestamp('moderated_at'),
+  moderationNotes: text('moderation_notes'),
+  responseFromOrg: text('response_from_org'),
+  respondedAt: timestamp('responded_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   serviceIdx: index('service_reviews_service_idx').on(table.serviceId),
   userIdx: index('service_reviews_user_idx').on(table.userId),
+  bookingIdx: index('service_reviews_booking_idx').on(table.bookingId),
   ratingIdx: index('service_reviews_rating_idx').on(table.rating),
+  isVisibleIdx: index('service_reviews_is_visible_idx').on(table.isVisible),
+  isFeaturedIdx: index('service_reviews_is_featured_idx').on(table.isFeatured),
+  createdAtIdx: index('service_reviews_created_at_idx').on(table.createdAt),
+  
+  serviceFk: foreignKey({
+    columns: [table.serviceId],
+    foreignColumns: [services.id],
+    name: 'service_reviews_service_fk'
+  }),
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'service_reviews_user_fk'
+  }),
+  bookingFk: foreignKey({
+    columns: [table.bookingId],
+    foreignColumns: [serviceBookings.id],
+    name: 'service_reviews_booking_fk'
+  }),
+  moderatedByFk: foreignKey({
+    columns: [table.moderatedBy],
+    foreignColumns: [users.id],
+    name: 'service_reviews_moderated_by_fk'
+  }),
 }));
 
 // Audit logs table
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  userId: integer('user_id'),
+  sessionId: text('session_id'),
   action: text('action').notNull(),
   resource: text('resource').notNull(),
   resourceId: text('resource_id'),
-  oldValues: json('old_values'),
-  newValues: json('new_values'),
+  method: varchar('method', { length: 10 }), // HTTP method
+  endpoint: text('endpoint'),
+  statusCode: integer('status_code'),
+  duration: integer('duration'), // Request duration in ms
+  oldValues: jsonb('old_values'),
+  newValues: jsonb('new_values'),
+  changes: jsonb('changes'), // Diff of what changed
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  metadata: json('metadata').$type<Record<string, any>>(),
-  createdAt: timestamp('created_at').notNull().defaultNow()
+  location: jsonb('location'), // Geo location data
+  deviceInfo: jsonb('device_info'),
+  severity: varchar('severity', { length: 20 }).default('info'), // 'low', 'info', 'warning', 'error', 'critical'
+  category: varchar('category', { length: 50 }), // 'auth', 'payment', 'service', 'admin', etc.
+  tags: json('tags').$type<string[]>().default([]),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   userIdx: index('audit_logs_user_idx').on(table.userId),
   actionIdx: index('audit_logs_action_idx').on(table.action),
   resourceIdx: index('audit_logs_resource_idx').on(table.resource),
+  categoryIdx: index('audit_logs_category_idx').on(table.category),
+  severityIdx: index('audit_logs_severity_idx').on(table.severity),
   createdAtIdx: index('audit_logs_created_at_idx').on(table.createdAt),
+  ipAddressIdx: index('audit_logs_ip_address_idx').on(table.ipAddress),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'audit_logs_user_fk'
+  }),
 }));
 
-// API keys table for external integrations
+// API keys table
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull(),
   name: text('name').notNull(),
+  description: text('description'),
   key: text('key').notNull().unique(),
+  keyHash: text('key_hash').notNull(), // Hashed version for security
   permissions: json('permissions').$type<string[]>().default([]),
-  isActive: boolean('is_active').notNull().default(true),
+  scopes: json('scopes').$type<string[]>().default([]),
+  rateLimit: integer('rate_limit').default(1000), // Requests per hour
+  usageCount: integer('usage_count').default(0),
+  isActive: boolean('is_active').default(true),
+  environment: varchar('environment', { length: 20 }).default('production'), // 'development', 'staging', 'production'
+  allowedIps: json('allowed_ips').$type<string[]>().default([]),
+  allowedDomains: json('allowed_domains').$type<string[]>().default([]),
   lastUsedAt: timestamp('last_used_at'),
+  lastUsedIp: text('last_used_ip'),
   expiresAt: timestamp('expires_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  revokedAt: timestamp('revoked_at'),
+  revokedBy: integer('revoked_by'),
+  revocationReason: text('revocation_reason'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdx: index('api_keys_user_idx').on(table.userId),
   keyIdx: uniqueIndex('api_keys_key_idx').on(table.key),
+  keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash),
+  isActiveIdx: index('api_keys_is_active_idx').on(table.isActive),
+  environmentIdx: index('api_keys_environment_idx').on(table.environment),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'api_keys_user_fk'
+  }),
+  revokedByFk: foreignKey({
+    columns: [table.revokedBy],
+    foreignColumns: [users.id],
+    name: 'api_keys_revoked_by_fk'
+  }),
 }));
 
 // Password reset tokens table
 export const passwordResetTokens = pgTable('password_reset_tokens', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull(),
   token: text('token').notNull().unique(),
+  tokenHash: text('token_hash').notNull(), // Hashed version for security
   expiresAt: timestamp('expires_at').notNull(),
-  isUsed: boolean('is_used').notNull().default(false),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow()
+  isUsed: boolean('is_used').default(false),
+  usedAt: timestamp('used_at'),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
   userIdx: index('password_reset_tokens_user_idx').on(table.userId),
   tokenIdx: uniqueIndex('password_reset_tokens_token_idx').on(table.token),
+  tokenHashIdx: index('password_reset_tokens_token_hash_idx').on(table.tokenHash),
   expiresAtIdx: index('password_reset_tokens_expires_at_idx').on(table.expiresAt),
+  isUsedIdx: index('password_reset_tokens_is_used_idx').on(table.isUsed),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'password_reset_tokens_user_fk'
+  }),
+}));
+
+// Notifications table
+export const notifications = pgTable('notifications', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: integer('user_id').notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'booking', 'payment', 'service', 'system', 'marketing'
+  title: varchar('title', { length: 200 }).notNull(),
+  message: text('message').notNull(),
+  data: jsonb('data'), // Additional structured data
+  priority: varchar('priority', { length: 20 }).default('normal'), // 'low', 'normal', 'high', 'urgent'
+  isRead: boolean('is_read').default(false),
+  readAt: timestamp('read_at'),
+  channel: varchar('channel', { length: 20 }).default('in_app'), // 'in_app', 'email', 'sms', 'push'
+  actionUrl: text('action_url'),
+  actionText: varchar('action_text', { length: 100 }),
+  expiresAt: timestamp('expires_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  userIdx: index('notifications_user_idx').on(table.userId),
+  typeIdx: index('notifications_type_idx').on(table.type),
+  priorityIdx: index('notifications_priority_idx').on(table.priority),
+  isReadIdx: index('notifications_is_read_idx').on(table.isRead),
+  channelIdx: index('notifications_channel_idx').on(table.channel),
+  createdAtIdx: index('notifications_created_at_idx').on(table.createdAt),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'notifications_user_fk'
+  }),
+}));
+
+// User favorites table
+export const userFavorites = pgTable('user_favorites', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: integer('user_id').notNull(),
+  serviceId: uuid('service_id').notNull(),
+  notes: text('notes'),
+  tags: json('tags').$type<string[]>().default([]),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  userIdx: index('user_favorites_user_idx').on(table.userId),
+  serviceIdx: index('user_favorites_service_idx').on(table.serviceId),
+  userServiceIdx: uniqueIndex('user_favorites_user_service_idx').on(table.userId, table.serviceId),
+  
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'user_favorites_user_fk'
+  }),
+  serviceFk: foreignKey({
+    columns: [table.serviceId],
+    foreignColumns: [services.id],
+    name: 'user_favorites_service_fk'
+  }),
+}));
+
+// Service categories table
+export const serviceCategories = pgTable('service_categories', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  icon: varchar('icon', { length: 100 }),
+  image: text('image'),
+  parentId: integer('parent_id'),
+  sortOrder: integer('sort_order').default(0),
+  isActive: boolean('is_active').default(true),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  nameIdx: uniqueIndex('service_categories_name_idx').on(table.name),
+  slugIdx: uniqueIndex('service_categories_slug_idx').on(table.slug),
+  parentIdx: index('service_categories_parent_idx').on(table.parentId),
+  isActiveIdx: index('service_categories_is_active_idx').on(table.isActive),
+  sortOrderIdx: index('service_categories_sort_order_idx').on(table.sortOrder),
+  
+  parentFk: foreignKey({
+    columns: [table.parentId],
+    foreignColumns: [table.id],
+    name: 'service_categories_parent_fk'
+  }),
+}));
+
+// Promotional codes/coupons table
+export const promotionalCodes = pgTable('promotional_codes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 200 }).notNull(),
+  description: text('description'),
+  type: varchar('type', { length: 20 }).notNull(), // 'percentage', 'fixed_amount', 'buy_x_get_y'
+  value: decimal('value', { precision: 10, scale: 2 }).notNull(),
+  minimumAmount: decimal('minimum_amount', { precision: 10, scale: 2 }),
+  maximumDiscount: decimal('maximum_discount', { precision: 10, scale: 2 }),
+  currency: varchar('currency', { length: 3 }).default('INR'),
+  usageLimit: integer('usage_limit'),
+  usageCount: integer('usage_count').default(0),
+  userUsageLimit: integer('user_usage_limit').default(1),
+  isActive: boolean('is_active').default(true),
+  isPublic: boolean('is_public').default(false),
+  applicableCategories: json('applicable_categories').$type<string[]>().default([]),
+  applicableServices: json('applicable_services').$type<string[]>().default([]),
+  excludedCategories: json('excluded_categories').$type<string[]>().default([]),
+  excludedServices: json('excluded_services').$type<string[]>().default([]),
+  validFrom: timestamp('valid_from').notNull(),
+  validTo: timestamp('valid_to').notNull(),
+  createdBy: integer('created_by').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  codeIdx: uniqueIndex('promotional_codes_code_idx').on(table.code),
+  typeIdx: index('promotional_codes_type_idx').on(table.type),
+  isActiveIdx: index('promotional_codes_is_active_idx').on(table.isActive),
+  validityIdx: index('promotional_codes_validity_idx').on(table.validFrom, table.validTo),
+  createdByIdx: index('promotional_codes_created_by_idx').on(table.createdBy),
+  
+  createdByFk: foreignKey({
+    columns: [table.createdBy],
+    foreignColumns: [users.id],
+    name: 'promotional_codes_created_by_fk'
+  }),
+}));
+
+// Promotional code usage table
+export const promotionalCodeUsage = pgTable('promotional_code_usage', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  promoCodeId: uuid('promo_code_id').notNull(),
+  userId: integer('user_id').notNull(),
+  bookingId: uuid('booking_id'),
+  transactionId: uuid('transaction_id'),
+  discountAmount: decimal('discount_amount', { precision: 10, scale: 2 }).notNull(),
+  originalAmount: decimal('original_amount', { precision: 10, scale: 2 }).notNull(),
+  finalAmount: decimal('final_amount', { precision: 10, scale: 2 }).notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  promoCodeIdx: index('promotional_code_usage_promo_code_idx').on(table.promoCodeId),
+  userIdx: index('promotional_code_usage_user_idx').on(table.userId),
+  bookingIdx: index('promotional_code_usage_booking_idx').on(table.bookingId),
+  transactionIdx: index('promotional_code_usage_transaction_idx').on(table.transactionId),
+  userPromoIdx: index('promotional_code_usage_user_promo_idx').on(table.userId, table.promoCodeId),
+  
+  promoCodeFk: foreignKey({
+    columns: [table.promoCodeId],
+    foreignColumns: [promotionalCodes.id],
+    name: 'promotional_code_usage_promo_code_fk'
+  }),
+  userFk: foreignKey({
+    columns: [table.userId],
+    foreignColumns: [users.id],
+    name: 'promotional_code_usage_user_fk'
+  }),
+  bookingFk: foreignKey({
+    columns: [table.bookingId],
+    foreignColumns: [serviceBookings.id],
+    name: 'promotional_code_usage_booking_fk'
+  }),
+  transactionFk: foreignKey({
+    columns: [table.transactionId],
+    foreignColumns: [transactions.id],
+    name: 'promotional_code_usage_transaction_fk'
+  }),
+}));
+
+// System settings table
+export const systemSettings = pgTable('system_settings', {
+  id: serial('id').primaryKey(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  value: text('value').notNull(),
+  type: varchar('type', { length: 20 }).default('string'), // 'string', 'number', 'boolean', 'json'
+  category: varchar('category', { length: 50 }).default('general'),
+  description: text('description'),
+  isPublic: boolean('is_public').default(false),
+  isEncrypted: boolean('is_encrypted').default(false),
+  updatedBy: integer('updated_by'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  keyIdx: uniqueIndex('system_settings_key_idx').on(table.key),
+  categoryIdx: index('system_settings_category_idx').on(table.category),
+  typeIdx: index('system_settings_type_idx').on(table.type),
+  isPublicIdx: index('system_settings_is_public_idx').on(table.isPublic),
+  
+  updatedByFk: foreignKey({
+    columns: [table.updatedBy],
+    foreignColumns: [users.id],
+    name: 'system_settings_updated_by_fk'
+  }),
 }));
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   services: many(services),
+  serviceBookings: many(serviceBookings),
   transactions: many(transactions),
   conversionRequests: many(conversionRequests),
   paymentMethods: many(paymentMethods),
@@ -241,6 +771,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   auditLogs: many(auditLogs),
   apiKeys: many(apiKeys),
   passwordResetTokens: many(passwordResetTokens),
+  notifications: many(notifications),
+  userFavorites: many(userFavorites),
+  promotionalCodes: many(promotionalCodes),
+  promotionalCodeUsage: many(promotionalCodeUsage),
 }));
 
 export const servicesRelations = relations(services, ({ one, many }) => ({
@@ -248,11 +782,40 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
     fields: [services.organizationId],
     references: [users.id]
   }),
+  approvedBy: one(users, {
+    fields: [services.approvedBy],
+    references: [users.id]
+  }),
+  lastModifiedBy: one(users, {
+    fields: [services.lastModifiedBy],
+    references: [users.id]
+  }),
+  bookings: many(serviceBookings),
   transactions: many(transactions),
   reviews: many(serviceReviews),
+  favorites: many(userFavorites),
 }));
 
-export const transactionsRelations = relations(transactions, ({ one }) => ({
+export const serviceBookingsRelations = relations(serviceBookings, ({ one, many }) => ({
+  service: one(services, {
+    fields: [serviceBookings.serviceId],
+    references: [services.id]
+  }),
+  user: one(users, {
+    fields: [serviceBookings.userId],
+    references: [users.id]
+  }),
+  cancelledBy: one(users, {
+    fields: [serviceBookings.cancelledBy],
+    references: [users.id]
+  }),
+  transactions: many(transactions),
+  paymentTransactions: many(paymentTransactions),
+  reviews: many(serviceReviews),
+  promotionalCodeUsage: many(promotionalCodeUsage),
+}));
+
+export const transactionsRelations = relations(transactions, ({ one, many }) => ({
   user: one(users, {
     fields: [transactions.userId],
     references: [users.id]
@@ -261,6 +824,16 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
     fields: [transactions.serviceId],
     references: [services.id]
   }),
+  booking: one(serviceBookings, {
+    fields: [transactions.bookingId],
+    references: [serviceBookings.id]
+  }),
+  processedBy: one(users, {
+    fields: [transactions.processedBy],
+    references: [users.id]
+  }),
+  paymentTransactions: many(paymentTransactions),
+  promotionalCodeUsage: many(promotionalCodeUsage),
 }));
 
 export const conversionRequestsRelations = relations(conversionRequests, ({ one }) => ({
@@ -295,6 +868,10 @@ export const paymentTransactionsRelations = relations(paymentTransactions, ({ on
     fields: [paymentTransactions.paymentMethodId],
     references: [paymentMethods.id]
   }),
+  booking: one(serviceBookings, {
+    fields: [paymentTransactions.bookingId],
+    references: [serviceBookings.id]
+  }),
 }));
 
 export const serviceReviewsRelations = relations(serviceReviews, ({ one }) => ({
@@ -304,6 +881,14 @@ export const serviceReviewsRelations = relations(serviceReviews, ({ one }) => ({
   }),
   user: one(users, {
     fields: [serviceReviews.userId],
+    references: [users.id]
+  }),
+  booking: one(serviceBookings, {
+    fields: [serviceReviews.bookingId],
+    references: [serviceBookings.id]
+  }),
+  moderatedBy: one(users, {
+    fields: [serviceReviews.moderatedBy],
     references: [users.id]
   }),
 }));
@@ -320,6 +905,10 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     fields: [apiKeys.userId],
     references: [users.id]
   }),
+  revokedBy: one(users, {
+    fields: [apiKeys.revokedBy],
+    references: [users.id]
+  }),
 }));
 
 export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
@@ -329,11 +918,73 @@ export const passwordResetTokensRelations = relations(passwordResetTokens, ({ on
   }),
 }));
 
-// Export types
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id]
+  }),
+}));
+
+export const userFavoritesRelations = relations(userFavorites, ({ one }) => ({
+  user: one(users, {
+    fields: [userFavorites.userId],
+    references: [users.id]
+  }),
+  service: one(services, {
+    fields: [userFavorites.serviceId],
+    references: [services.id]
+  }),
+}));
+
+export const serviceCategoriesRelations = relations(serviceCategories, ({ one, many }) => ({
+  parent: one(serviceCategories, {
+    fields: [serviceCategories.parentId],
+    references: [serviceCategories.id]
+  }),
+  children: many(serviceCategories),
+}));
+
+export const promotionalCodesRelations = relations(promotionalCodes, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [promotionalCodes.createdBy],
+    references: [users.id]
+  }),
+  usage: many(promotionalCodeUsage),
+}));
+
+export const promotionalCodeUsageRelations = relations(promotionalCodeUsage, ({ one }) => ({
+  promoCode: one(promotionalCodes, {
+    fields: [promotionalCodeUsage.promoCodeId],
+    references: [promotionalCodes.id]
+  }),
+  user: one(users, {
+    fields: [promotionalCodeUsage.userId],
+    references: [users.id]
+  }),
+  booking: one(serviceBookings, {
+    fields: [promotionalCodeUsage.bookingId],
+    references: [serviceBookings.id]
+  }),
+  transaction: one(transactions, {
+    fields: [promotionalCodeUsage.transactionId],
+    references: [transactions.id]
+  }),
+}));
+
+export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [systemSettings.updatedBy],
+    references: [users.id]
+  }),
+}));
+
+// Export types for TypeScript
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Service = typeof services.$inferSelect;
 export type NewService = typeof services.$inferInsert;
+export type ServiceBooking = typeof serviceBookings.$inferSelect;
+export type NewServiceBooking = typeof serviceBookings.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type ConversionRequest = typeof conversionRequests.$inferSelect;
@@ -350,3 +1001,15 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
+export type UserFavorite = typeof userFavorites.$inferSelect;
+export type NewUserFavorite = typeof userFavorites.$inferInsert;
+export type ServiceCategory = typeof serviceCategories.$inferSelect;
+export type NewServiceCategory = typeof serviceCategories.$inferInsert;
+export type PromotionalCode = typeof promotionalCodes.$inferSelect;
+export type NewPromotionalCode = typeof promotionalCodes.$inferInsert;
+export type PromotionalCodeUsage = typeof promotionalCodeUsage.$inferSelect;
+export type NewPromotionalCodeUsage = typeof promotionalCodeUsage.$inferInsert;
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type NewSystemSetting = typeof systemSettings.$inferInsert;

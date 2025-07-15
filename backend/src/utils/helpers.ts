@@ -1,254 +1,258 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { Request } from 'express';
-import { ApiResponse, PaginationInfo } from '../types';
-import { User } from '../models/schema';
-import { SECURITY, PAGINATION_DEFAULTS } from './constants';
+// Replace bcrypt with bcryptjs in your helpers.ts file
 
-/**
- * Custom Error class for operational errors.
- */
+import bcrypt from 'bcryptjs'; // Changed from 'bcrypt' to 'bcryptjs'
+import jwt, { Secret } from 'jsonwebtoken';
+
+// Environment utilities
+export const isDevelopment = (): boolean => {
+  return process.env.NODE_ENV === 'development';
+};
+
+
+// Password hashing utilities
+export const hashPassword = async (password: string): Promise<string> => {
+  const saltRounds = 12;
+  return await bcrypt.hash(password, saltRounds);
+};
+
+export const comparePassword = async (password: string, hashedPassword: string): Promise<boolean> => {
+  return await bcrypt.compare(password, hashedPassword);
+};
+
+// JWT utilities
+export const generateToken = (
+  payload: string | object | Buffer,
+  expiresIn: string = '7d'
+): string => {
+  const secretKey = process.env.JWT_SECRET;
+  if (!secretKey) {
+    throw new Error('JWT_SECRET is not defined in environment variables');
+  }
+  return jwt.sign(payload, secretKey, { expiresIn } as jwt.SignOptions);
+};
+
+export const verifyToken = (token: string): any => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not defined in environment variables');
+  }
+  return jwt.verify(token, secret);
+};
+// User data sanitization
+
+export const sanitizeUser = (user: any) => {
+  const { passwordHash, ...sanitizedUser } = user;
+  return sanitizedUser;
+};
+
+// API response helper
+export const createApiResponse = (success: boolean, data: any = null, message: string = '') => {
+  return {
+    success,
+    data,
+    message,
+    timestamp: new Date().toISOString()
+  };
+};
+
+// Pagination helpers
+export const validatePaginationParams = (page?: string, limit?: string) => {
+  const pageNum = parseInt(page || '1', 10);
+  const limitNum = parseInt(limit || '10', 10);
+  
+  return {
+    page: Math.max(1, pageNum),
+    limit: Math.min(100, Math.max(1, limitNum)),
+    offset: (Math.max(1, pageNum) - 1) * Math.min(100, Math.max(1, limitNum))
+  };
+};
+
+// Generate random string
+export const generateRandomString = (length: number = 32): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+// Email validation
+export const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+// Phone validation (basic)
+export const isValidPhone = (phone: string): boolean => {
+  const phoneRegex = /^[+]?[1-9][\d]{1,14}$/;
+  return phoneRegex.test(phone.replace(/\s/g, ''));
+};
+
+// Format currency
+export const formatCurrency = (amount: number, currency: string = 'INR'): string => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: currency,
+  }).format(amount);
+};
+
+// Format date
+export const formatDate = (date: Date | string): string => {
+  return new Intl.DateTimeFormat('en-IN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date));
+};
+
+// Calculate percentage
+export const calculatePercentage = (value: number, total: number): number => {
+  if (total === 0) return 0;
+  return Math.round((value / total) * 100 * 100) / 100; // Round to 2 decimal places
+};
+
+// Sleep utility
+export const sleep = (ms: number): Promise<void> => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+// Generate unique ID
+export const generateUniqueId = (): string => {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
+// Truncate text
+export const truncateText = (text: string, maxLength: number = 100): string => {
+  if (text.length <= maxLength) return text;
+  return text.substr(0, maxLength - 3) + '...';
+};
+
+// Deep clone object
+export const deepClone = <T>(obj: T): T => {
+  return JSON.parse(JSON.stringify(obj));
+};
+
+// Check if object is empty
+export const isEmpty = (obj: any): boolean => {
+  if (obj === null || obj === undefined) return true;
+  if (Array.isArray(obj)) return obj.length === 0;
+  if (typeof obj === 'object') return Object.keys(obj).length === 0;
+  if (typeof obj === 'string') return obj.trim().length === 0;
+  return false;
+};
+
+// Capitalize first letter
+export const capitalize = (str: string): string => {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
+
+// Generate slug from string
+export const generateSlug = (str: string): string => {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/[\s_-]+/g, '-') // Replace spaces and underscores with hyphens
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+};
+
+// Convert to title case
+export const toTitleCase = (str: string): string => {
+  return str.replace(/\w\S*/g, (txt) => {
+    return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+  });
+};
+
+// Parse JSON safely
+export const safeJsonParse = (str: string, defaultValue: any = null): any => {
+  try {
+    return JSON.parse(str);
+  } catch (error) {
+    return defaultValue;
+  }
+};
+
+// Get file extension
+export const getFileExtension = (filename: string): string => {
+  return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2);
+};
+
+// Validate file type
+export const isValidFileType = (filename: string, allowedTypes: string[]): boolean => {
+  const extension = getFileExtension(filename).toLowerCase();
+  return allowedTypes.includes(extension);
+};
+
+// Convert bytes to human readable format
+export const formatBytes = (bytes: number, decimals: number = 2): string => {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+// Rate limiting helper
+export const createRateLimitKey = (identifier: string, action: string): string => {
+  return `rate_limit:${action}:${identifier}`;
+};
+
+// Error handling
 export class AppError extends Error {
-    statusCode: number;
-    status: string;
-    isOperational: boolean;
+  public statusCode: number;
+  public isOperational: boolean;
 
-    constructor(message: string, statusCode: number) {
-        super(message);
-        this.statusCode = statusCode;
-        this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
-        this.isOperational = true;
-        Error.captureStackTrace(this, this.constructor);
-    }
+  constructor(message: string, statusCode: number = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    this.isOperational = true;
+
+    Error.captureStackTrace(this, this.constructor);
+  }
 }
 
-/**
- * Creates a standardized API response object.
- */
-export const createApiResponse = <T>(
-    success: boolean,
-    message: string,
-    data?: T,
-    error?: string,
-    pagination?: PaginationInfo
-): ApiResponse<T> => {
-    const response: ApiResponse<T> = {
-        success,
-        message,
-        timestamp: new Date().toISOString(),
-    };
-
-    if (data !== undefined) {
-        response.data = data;
-    }
-
-    if (error) {
-        response.error = error;
-    }
-
-    if (pagination) {
-        response.pagination = pagination;
-    }
-
-    return response;
+// Async wrapper for error handling
+export const asyncHandler = (fn: Function) => {
+  return (req: any, res: any, next: any) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
 };
 
-/**
- * Creates a custom error with status code.
- */
-export const createError = (message: string, statusCode: number = 500): AppError => {
-    return new AppError(message, statusCode);
-};
-
-/**
- * Hash password using bcrypt.
- */
-export const hashPassword = async (password: string): Promise<string> => {
-    return await bcrypt.hash(password, SECURITY.BCRYPT_ROUNDS);
-};
-
-/**
- * Compare password with hash.
- */
-export const comparePassword = async (password: string, hash: string): Promise<boolean> => {
-    return await bcrypt.compare(password, hash);
-};
-
-/**
- * Generate JWT token.
- */
-export const generateToken = (payload: object | Buffer): string => {
-    if (!process.env.JWT_SECRET) {
-        throw new Error('JWT_SECRET is not defined in environment variables');
-    }
-
-    return jwt.sign(payload, process.env.JWT_SECRET as jwt.Secret, {
-        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
-    } as jwt.SignOptions);
-};
-
-/**
- * Verify JWT token.
- */
-export const verifyToken = (token: string): any => {
-    if (!process.env.JWT_SECRET) {
-        throw new Error('JWT_SECRET is not defined in environment variables');
-    }
-
-    return jwt.verify(token, process.env.JWT_SECRET);
-};
-
-/**
- * Remove sensitive data from user object.
- */
-export const sanitizeUser = (user: any): Partial<User> => {
-    const { password, ...sanitized } = user;
-    return sanitized;
-};
-
-/**
- * Get client IP address from request.
- */
-export const getClientIp = (req: Request): string => {
-    return (req.headers['x-forwarded-for'] as string) ||
-           (req.headers['x-real-ip'] as string) ||
-           req.connection.remoteAddress ||
-           req.socket.remoteAddress ||
-           'unknown';
-};
-
-/**
- * Get user agent from request.
- */
-export const getUserAgent = (req: Request): string => {
-    return req.headers['user-agent'] || 'unknown';
-};
-
-/**
- * Validate pagination parameters.
- */
-export const validatePaginationParams = (page?: string, limit?: string) => {
-    const pageNum = page ? parseInt(page) : PAGINATION_DEFAULTS.PAGE;
-    const limitNum = limit ? parseInt(limit) : PAGINATION_DEFAULTS.LIMIT;
-
-    return {
-        page: Math.max(1, pageNum),
-        limit: Math.min(PAGINATION_DEFAULTS.MAX_LIMIT, Math.max(1, limitNum))
-    };
-};
-
-/**
- * Calculate pagination info.
- */
-export const calculatePagination = (page: number, limit: number, total: number): PaginationInfo => {
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-    };
-};
-
-/**
- * Generate random order ID.
- */
-export const generateOrderId = (): string => {
-    return `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-};
-
-/**
- * Generate random API key.
- */
-export const generateApiKey = (): string => {
-    return `erthaex_${Date.now()}_${Math.random().toString(36).substr(2, 16)}`;
-};
-
-/**
- * Check if environment is development.
- */
-export const isDevelopment = (): boolean => {
-    return process.env.NODE_ENV === 'development';
-};
-
-/**
- * Check if environment is production.
- */
-export const isProduction = (): boolean => {
-    return process.env.NODE_ENV === 'production';
-};
-
-/**
- * Sleep for given milliseconds.
- */
-export const sleep = (ms: number): Promise<void> => {
-    return new Promise(resolve => setTimeout(resolve, ms));
-};
-
-/**
- * Format currency amount.
- */
-export const formatCurrency = (amount: number, currency: string = 'INR'): string => {
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(amount);
-};
-
-/**
- * Validate email format.
- */
-export const isValidEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-};
-
-/**
- * Validate UUID format.
- */
-export const isValidUUID = (id: string): boolean => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(id);
-};
-
-/**
- * Parse JSON safely.
- */
-export const safeJsonParse = (jsonString: string, defaultValue: any = null): any => {
-    try {
-        return JSON.parse(jsonString);
-    } catch (error) {
-        return defaultValue;
-    }
-};
-
-/**
- * Capitalize first letter of string.
- */
-export const capitalize = (str: string): string => {
-    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-};
-
-/**
- * Generate random string.
- */
-export const generateRandomString = (length: number): string => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-};
-
-/**
- * Generate password reset token.
- */
-export const generatePasswordResetToken = (): string => {
-    return generateRandomString(32);
+// Default export for common utilities
+export default {
+  isDevelopment,
+  hashPassword,
+  comparePassword,
+  generateToken,
+  verifyToken,
+  sanitizeUser,
+  createApiResponse,
+  validatePaginationParams,
+  generateRandomString,
+  isValidEmail,
+  isValidPhone,
+  formatCurrency,
+  formatDate,
+  calculatePercentage,
+  sleep,
+  generateUniqueId,
+  truncateText,
+  deepClone,
+  isEmpty,
+  capitalize,
+  generateSlug,
+  toTitleCase,
+  safeJsonParse,
+  getFileExtension,
+  isValidFileType,
+  formatBytes,
+  createRateLimitKey,
+  AppError,
+  asyncHandler
 };

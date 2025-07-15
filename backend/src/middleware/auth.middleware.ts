@@ -1,115 +1,267 @@
-import { Response, NextFunction } from 'express';
-import { verifyToken, createApiResponse } from '../utils/helpers';
-import { getDb } from '../config/database';
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { auth as adminAuth } from '../config/firebase-admin';
 import { users } from '../models/schema';
+import { getDb } from '../config/database';
 import { eq } from 'drizzle-orm';
-import { AuthRequest } from '../types';
-import { USER_STATUS } from '../utils/constants';
-import { logger } from '../utils/logger';
+import { createApiResponse } from '../utils/helpers';
 
-export const authenticateToken = async (
-  req: AuthRequest,
+// Extend Request interface to include user data
+interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: number;
+    email: string;
+    role: string;
+    firebaseUid?: string;
+  };
+  firebaseUser?: any;
+}
+
+// Validate Firebase ID token middleware
+export const validateFirebaseToken = async (
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-      res.status(401).json(
-        createApiResponse(false, 'Access token is required')
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json(
+        createApiResponse(false, 'No token provided')
       );
-      return;
     }
 
-    const decoded = verifyToken(token);
-    const db = getDb();
+    const token = authHeader.substring(7);
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, decoded.userId))
-      .limit(1);
-
-    if (!user) {
-      res.status(401).json(
-        createApiResponse(false, 'Invalid token - user not found')
-      );
-      return;
-    }
-
-    if (user.status !== USER_STATUS.ACTIVE) {
-      res.status(403).json(
-        createApiResponse(false, `Account is ${user.status}`)
-      );
-      return;
-    }
-
-    req.user = user;
+    // Verify Firebase ID token
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    
+    // Attach Firebase user info to request
+    req.firebaseUser = decodedToken;
+    
     next();
-  } catch (error) {
-    logger.error('Authentication error:', error);
-    res.status(401).json(
-      createApiResponse(false, 'Invalid or expired token')
+  } catch (error: any) {
+    console.error('Firebase token validation error:', error);
+    
+    let message = 'Invalid token';
+    if (error.code === 'auth/id-token-expired') {
+      message = 'Token expired';
+    } else if (error.code === 'auth/id-token-revoked') {
+      message = 'Token revoked';
+    }
+    
+    return res.status(401).json(
+      createApiResponse(false, message)
     );
   }
 };
 
-export const optionalAuth = async (
-  req: AuthRequest,
+// General authentication middleware (works with both Firebase and JWT)
+export const authenticateToken = async (
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (token) {
-      try {
-        const decoded = verifyToken(token);
-        const db = getDb();
-
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, decoded.userId))
-          .limit(1);
-
-        if (user && user.status === USER_STATUS.ACTIVE) {
-          req.user = user;
-        }
-      } catch (error) {
-        logger.warn('Optional auth failed:', error);
-      }
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json(
+        createApiResponse(false, 'No token provided')
+      );
     }
 
+    const token = authHeader.substring(7);
+    const db = getDb(); // Reuse the database connection
+
+    try {
+      // Try Firebase token first
+      const decodedFirebaseToken = await adminAuth.verifyIdToken(token);
+      
+      // Find user by Firebase UID
+      const userResult = await db
+        .select()
+        .from(users)
+        .where(eq(users.firebaseUid, decodedFirebaseToken.uid))
+        .limit(1);
+
+      if (userResult.length === 0) {
+        return res.status(401).json(
+          createApiResponse(false, 'User not found')
+        );
+      }
+
+      const user = userResult[0];
+      
+      // Check if user is active
+      if (!user.isActive) {
+        return res.status(403).json(
+          createApiResponse(false, 'Account suspended')
+        );
+      }
+
+      req.user = {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        firebaseUid: user.firebaseUid || undefined
+      };
+      
+      req.firebaseUser = decodedFirebaseToken;
+      
+    } catch (firebaseError) {
+      // If Firebase token validation fails, try JWT
+      try {
+        const decodedJWT = jwt.verify(token, process.env.JWT_SECRET!) as any;
+        
+        // Find user by ID from JWT
+        const userResult = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, decodedJWT.userId))
+          .limit(1);
+
+        if (userResult.length === 0) {
+          return res.status(401).json(
+            createApiResponse(false, 'User not found')
+          );
+        }
+
+        const user = userResult[0];
+        
+        // Check if user is active
+        if (!user.isActive) {
+          return res.status(403).json(
+            createApiResponse(false, 'Account suspended')
+          );
+        }
+
+        req.user = {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          firebaseUid: user.firebaseUid || undefined
+        };
+        
+      } catch (jwtError) {
+        console.error('JWT validation error:', jwtError);
+        return res.status(401).json(
+          createApiResponse(false, 'Invalid token')
+        );
+      }
+    }
+    
     next();
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Authentication error:', error);
+    return res.status(500).json(
+      createApiResponse(false, 'Authentication failed')
+    );
+  }
+};
+
+// Optional authentication middleware
+export const optionalAuth = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+
+    const token = authHeader.substring(7);
+    const db = getDb(); // Reuse the database connection
+    
+    try {
+      // Try Firebase token first
+      const decodedFirebaseToken = await adminAuth.verifyIdToken(token);
+      
+      const userResult = await db
+        .select()
+        .from(users)
+        .where(eq(users.firebaseUid, decodedFirebaseToken.uid))
+        .limit(1);
+
+      if (userResult.length > 0) {
+        const user = userResult[0];
+        if (user.isActive) {
+          req.user = {
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            firebaseUid: user.firebaseUid || undefined
+          };
+          req.firebaseUser = decodedFirebaseToken;
+        }
+      }
+    } catch (firebaseError) {
+      // Try JWT fallback
+      try {
+        const decodedJWT = jwt.verify(token, process.env.JWT_SECRET!) as any;
+        
+        const userResult = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, decodedJWT.userId))
+          .limit(1);
+
+        if (userResult.length > 0) {
+          const user = userResult[0];
+          if (user.isActive) {
+            req.user = {
+              userId: user.id,
+              email: user.email,
+              role: user.role,
+              firebaseUid: user.firebaseUid || undefined
+            };
+          }
+        }
+      } catch (jwtError) {
+        // Ignore JWT errors in optional auth
+      }
+    }
+    
+    next();
+  } catch (error: any) {
+    // Ignore errors in optional auth
     next();
   }
 };
 
-export const validateApiKey = async (
-  req: AuthRequest,
+// API Key validation middleware
+export const validateApiKey = (
+  req: Request,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const apiKey = req.headers['x-api-key'] as string;
-
+    
     if (!apiKey) {
-      logger.warn('No API key provided. Skipping API key validation for development.');
-      next();
-      return;
+      return res.status(401).json(
+        createApiResponse(false, 'API key required')
+      );
     }
 
-    // TODO: Implement actual API key validation logic here
+    // Check against environment variable
+    const validApiKey = process.env.API_KEY;
+    
+    if (apiKey !== validApiKey) {
+      return res.status(401).json(
+        createApiResponse(false, 'Invalid API key')
+      );
+    }
+    
     next();
-  } catch (error) {
-    logger.error('API key validation error:', error);
-    res.status(401).json(
-      createApiResponse(false, 'Invalid API key')
+  } catch (error: any) {
+    console.error('API key validation error:', error);
+    return res.status(500).json(
+      createApiResponse(false, 'API key validation failed')
     );
   }
 };

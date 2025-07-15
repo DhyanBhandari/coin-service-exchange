@@ -1,197 +1,227 @@
 import Joi from 'joi';
-import { SERVICE_CATEGORIES, USER_ROLES } from './constants';
 
-export const validationSchemas = {
-  // Auth schemas
-  register: Joi.object({
-    name: Joi.string().min(2).max(100).required(),
-    email: Joi.string().email().required(),
-    password: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]')).required()
-      .messages({
-        'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
-      }),
-    role: Joi.string().valid(...Object.values(USER_ROLES)).optional()
+// Traditional authentication schemas
+export const registerSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+  name: Joi.string().min(2).max(100).required(),
+  role: Joi.string().valid('user', 'org').default('user'),
+});
+
+export const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required(),
+});
+
+export const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
+export const resetPasswordSchema = Joi.object({
+  token: Joi.string().required(),
+  newPassword: Joi.string().min(6).required(),
+});
+
+export const updatePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(6).required(),
+});
+
+// Firebase authentication schemas
+export const firebaseRegisterSchema = Joi.object({
+  uid: Joi.string().required(),
+  email: Joi.string().email().required(),
+  name: Joi.string().min(2).max(100).required(),
+  role: Joi.string().valid('user', 'org').default('user'),
+  emailVerified: Joi.boolean().default(false),
+});
+
+export const firebaseLoginSchema = Joi.object({
+  uid: Joi.string().required(),
+  email: Joi.string().email().required(),
+  emailVerified: Joi.boolean().default(false),
+});
+
+// User schemas
+export const updateProfileSchema = Joi.object({
+  name: Joi.string().min(2).max(100),
+  email: Joi.string().email(),
+  phone: Joi.string().pattern(/^[+]?[1-9][\d]{1,14}$/),
+  address: Joi.string().max(500),
+});
+
+// Service schemas
+export const createServiceSchema = Joi.object({
+  title: Joi.string().min(3).max(200).required(),
+  description: Joi.string().min(10).max(2000).required(),
+  category: Joi.string().valid(
+    'accommodation',
+    'travel',
+    'food',
+    'technology',
+    'events',
+    'entertainment',
+    'other'
+  ).required(),
+  price: Joi.number().integer().min(1).max(10000).required(),
+  location: Joi.string().max(200),
+  duration: Joi.string().max(100),
+  capacity: Joi.number().integer().min(1).max(1000),
+  tags: Joi.array().items(Joi.string().max(50)).max(10),
+  images: Joi.array().items(Joi.string().uri()).max(5),
+  isActive: Joi.boolean().default(true),
+});
+
+export const updateServiceSchema = Joi.object({
+  title: Joi.string().min(3).max(200),
+  description: Joi.string().min(10).max(2000),
+  category: Joi.string().valid(
+    'accommodation',
+    'travel',
+    'food',
+    'technology',
+    'events',
+    'entertainment',
+    'other'
+  ),
+  price: Joi.number().integer().min(1).max(10000),
+  location: Joi.string().max(200),
+  duration: Joi.string().max(100),
+  capacity: Joi.number().integer().min(1).max(1000),
+  tags: Joi.array().items(Joi.string().max(50)).max(10),
+  images: Joi.array().items(Joi.string().uri()).max(5),
+  isActive: Joi.boolean(),
+});
+
+export const bookServiceSchema = Joi.object({
+  serviceId: Joi.number().integer().required(),
+  quantity: Joi.number().integer().min(1).max(100).default(1),
+  notes: Joi.string().max(500),
+  contactInfo: Joi.object({
+    phone: Joi.string().pattern(/^[+]?[1-9][\d]{1,14}$/),
+    email: Joi.string().email(),
+    preferredContact: Joi.string().valid('phone', 'email').default('email'),
   }),
+});
 
-  login: Joi.object({
-    email: Joi.string().email().required(),
-    password: Joi.string().required()
-  }),
+export const addReviewSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).required(),
+  comment: Joi.string().min(10).max(1000).required(),
+  isAnonymous: Joi.boolean().default(false),
+});
 
-  updatePassword: Joi.object({
-    currentPassword: Joi.string().required(),
-    newPassword: Joi.string().min(8).pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]')).required()
-  }),
+// Payment schemas
+export const createPaymentOrderSchema = Joi.object({
+  amount: Joi.number().integer().min(1).max(100000).required(),
+  currency: Joi.string().valid('INR').default('INR'),
+  purpose: Joi.string().valid('coins_purchase', 'service_payment').required(),
+  metadata: Joi.object(),
+});
 
-  // User schemas
-  updateProfile: Joi.object({
-    name: Joi.string().min(2).max(100).optional(),
-    phone: Joi.string().pattern(/^[+]?[1-9]\\d{1,14}$/).optional(),
-    address: Joi.object({
-      street: Joi.string().max(200).optional(),
-      city: Joi.string().max(100).optional(),
-      state: Joi.string().max(100).optional(),
-      country: Joi.string().max(100).optional(),
-      zipCode: Joi.string().max(20).optional()
-    }).optional(),
-    preferences: Joi.object({
-      notifications: Joi.boolean().optional(),
-      newsletter: Joi.boolean().optional(),
-      language: Joi.string().valid('en', 'hi', 'es', 'fr').optional()
-    }).optional(),
-    profileImage: Joi.string().uri().optional()
-  }),
+export const verifyPaymentSchema = Joi.object({
+  razorpay_order_id: Joi.string().required(),
+  razorpay_payment_id: Joi.string().required(),
+  razorpay_signature: Joi.string().required(),
+});
 
-  // Service schemas
-  createService: Joi.object({
-    title: Joi.string().min(5).max(200).required(),
-    description: Joi.string().min(20).max(2000).required(),
-    price: Joi.number().min(1).max(1000000).required(),
-    category: Joi.string().valid(...SERVICE_CATEGORIES).required(),
-    features: Joi.array().items(Joi.string().min(1).max(100)).min(1).max(20).required(),
-    images: Joi.array().items(Joi.string().uri()).max(10).optional(),
-    tags: Joi.array().items(Joi.string().min(1).max(50)).max(10).optional(),
-    metadata: Joi.object().optional()
-  }),
+export const refundPaymentSchema = Joi.object({
+  paymentId: Joi.string().required(),
+  amount: Joi.number().integer().min(1),
+  reason: Joi.string().max(500),
+});
 
-  updateService: Joi.object({
-    title: Joi.string().min(5).max(200).optional(),
-    description: Joi.string().min(20).max(2000).optional(),
-    price: Joi.number().min(1).max(1000000).optional(),
-    category: Joi.string().valid(...SERVICE_CATEGORIES).optional(),
-    features: Joi.array().items(Joi.string().min(1).max(100)).min(1).max(20).optional(),
-    images: Joi.array().items(Joi.string().uri()).max(10).optional(),
-    tags: Joi.array().items(Joi.string().min(1).max(50)).max(10).optional(),
-    metadata: Joi.object().optional()
-  }),
+// Conversion schemas
+export const createConversionSchema = Joi.object({
+  amount: Joi.number().integer().min(100).max(50000).required(),
+  bankDetails: Joi.object({
+    accountNumber: Joi.string().pattern(/^[0-9]{9,18}$/).required(),
+    ifscCode: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required(),
+    accountHolderName: Joi.string().min(2).max(100).required(),
+    bankName: Joi.string().min(2).max(100).required(),
+  }).required(),
+  notes: Joi.string().max(500),
+});
 
-  addReview: Joi.object({
-    rating: Joi.number().integer().min(1).max(5).required(),
-    review: Joi.string().min(10).max(1000).optional()
-  }),
+export const processConversionSchema = Joi.object({
+  status: Joi.string().valid('approved', 'rejected').required(),
+  adminNotes: Joi.string().max(500),
+  transactionId: Joi.string().max(100),
+});
 
-  // Payment schemas
-  createPaymentOrder: Joi.object({
-    amount: Joi.number().min(10).max(1000000).required(),
-    purpose: Joi.string().valid('coin_purchase', 'service_booking').optional()
-  }),
+// Query parameter schemas
+export const paginationSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  sortBy: Joi.string().max(50),
+  sortOrder: Joi.string().valid('asc', 'desc').default('desc'),
+});
 
-  verifyPayment: Joi.object({
-    razorpay_order_id: Joi.string().required(),
-    razorpay_payment_id: Joi.string().required(),
-    razorpay_signature: Joi.string().required()
-  }),
+export const serviceFilterSchema = Joi.object({
+  category: Joi.string().valid(
+    'accommodation',
+    'travel',
+    'food',
+    'technology',
+    'events',
+    'entertainment',
+    'other'
+  ),
+  minPrice: Joi.number().integer().min(0),
+  maxPrice: Joi.number().integer().min(0),
+  location: Joi.string().max(200),
+  isActive: Joi.boolean(),
+  search: Joi.string().max(100),
+}).concat(paginationSchema);
 
-  processRefund: Joi.object({
-    paymentId: Joi.string().required(),
-    amount: Joi.number().min(1).optional(),
-    reason: Joi.string().max(500).optional()
-  }),
+export const transactionFilterSchema = Joi.object({
+  type: Joi.string().valid('credit', 'debit'),
+  status: Joi.string().valid('pending', 'completed', 'failed', 'cancelled'),
+  fromDate: Joi.date().iso(),
+  toDate: Joi.date().iso(),
+  minAmount: Joi.number().min(0),
+  maxAmount: Joi.number().min(0),
+}).concat(paginationSchema);
 
-  // Conversion schemas
-  createConversionRequest: Joi.object({
-    amount: Joi.number().min(50).max(100000).required(),
-    bankDetails: Joi.object({
-      accountNumber: Joi.string().pattern(/^\\d{9,18}$/).required(),
-      ifscCode: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required(),
-      accountHolderName: Joi.string().min(2).max(100).required(),
-      bankName: Joi.string().min(2).max(100).required()
-    }).required()
-  }),
+export const conversionFilterSchema = Joi.object({
+  status: Joi.string().valid('pending', 'approved', 'rejected', 'completed'),
+  fromDate: Joi.date().iso(),
+  toDate: Joi.date().iso(),
+  minAmount: Joi.number().min(0),
+  maxAmount: Joi.number().min(0),
+}).concat(paginationSchema);
 
-  approveConversionRequest: Joi.object({
-    transactionId: Joi.string().max(100).optional(),
-    notes: Joi.string().max(500).optional()
-  }),
+// Admin schemas
+export const userManagementSchema = Joi.object({
+  action: Joi.string().valid('suspend', 'reactivate').required(),
+  reason: Joi.string().max(500),
+  duration: Joi.number().integer().min(1).max(365), // days
+});
 
-  rejectConversionRequest: Joi.object({
-    reason: Joi.string().min(10).max(500).required()
-  }),
+export const serviceApprovalSchema = Joi.object({
+  status: Joi.string().valid('approved', 'rejected').required(),
+  adminNotes: Joi.string().max(500),
+});
 
-  // Query parameter schemas
-  paginationQuery: Joi.object({
-    page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
-    sortBy: Joi.string().optional(),
-    sortOrder: Joi.string().valid('asc', 'desc').optional()
-  }),
+// File upload schemas
+export const fileUploadSchema = Joi.object({
+  fieldname: Joi.string().required(),
+  originalname: Joi.string().required(),
+  mimetype: Joi.string().valid(
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'application/pdf'
+  ).required(),
+  size: Joi.number().max(5 * 1024 * 1024), // 5MB max
+});
 
-  servicesQuery: Joi.object({
-    page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
-    category: Joi.string().valid(...SERVICE_CATEGORIES).optional(),
-    search: Joi.string().min(2).max(100).optional(),
-    minPrice: Joi.number().min(0).optional(),
-    maxPrice: Joi.number().min(0).optional(),
-    status: Joi.string().valid('active', 'inactive', 'pending', 'suspended').optional(),
-    organizationId: Joi.string().uuid().optional(),
-    sortBy: Joi.string().valid('createdAt', 'price', 'rating', 'bookings').optional(),
-    sortOrder: Joi.string().valid('asc', 'desc').optional()
-  }),
-
-  transactionsQuery: Joi.object({
-    page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
-    type: Joi.string().valid('coin_purchase', 'service_booking', 'coin_conversion', 'refund').optional(),
-    status: Joi.string().valid('pending', 'completed', 'failed', 'cancelled').optional(),
-    userId: Joi.string().uuid().optional(),
-    serviceId: Joi.string().uuid().optional(),
-    startDate: Joi.date().iso().optional(),
-    endDate: Joi.date().iso().optional()
-  }),
-
-  auditLogsQuery: Joi.object({
-    page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
-    userId: Joi.string().uuid().optional(),
-    action: Joi.string().optional(),
-    resource: Joi.string().optional(),
-    startDate: Joi.date().iso().optional(),
-    endDate: Joi.date().iso().optional()
-  }),
-
-  // Parameter schemas
-  uuidParam: Joi.object({
-    id: Joi.string().uuid().required()
-  }),
-
-  // Admin schemas
-  suspendUser: Joi.object({
-    reason: Joi.string().min(10).max(500).required()
-  }),
-
-  recentActivity: Joi.object({
-    limit: Joi.number().integer().min(1).max(50).optional()
-  })
-};
-
-// Custom validation functions
-export const validateUUID = (id: string): boolean => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(id);
-};
-
-export const validateEmail = (email: string): boolean => {
-  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
-  return emailRegex.test(email);
-};
-
-export const validatePhoneNumber = (phone: string): boolean => {
-  const phoneRegex = /^[+]?[1-9]\\d{1,14}$/;
-  return phoneRegex.test(phone);
-};
-
-export const validateIFSC = (ifsc: string): boolean => {
-  const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-  return ifscRegex.test(ifsc);
-};
-
-export const validateAccountNumber = (accountNumber: string): boolean => {
-  const accountRegex = /^\\d{9,18}$/;
-  return accountRegex.test(accountNumber);
-};
-
-export const validatePassword = (password: string): boolean => {
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$/;
-  return passwordRegex.test(password);
-};
+// API key schemas
+export const createApiKeySchema = Joi.object({
+  name: Joi.string().min(3).max(100).required(),
+  permissions: Joi.array().items(
+    Joi.string().valid('read', 'write', 'admin')
+  ).min(1).required(),
+  expiresAt: Joi.date().iso().greater('now'),
+  isActive: Joi.boolean().default(true),
+});
