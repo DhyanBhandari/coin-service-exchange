@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Import AuthProvider
 import { AuthProvider } from "./contexts/AuthContext";
-
+// for the
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
