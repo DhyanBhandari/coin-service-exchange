@@ -1,4 +1,4 @@
-// src/pages/user/BrowseServices.tsx - Updated with wallet balance and navigation
+// src/pages/user/BrowseServices.tsx - Updated with real booking functionality
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ArrowLeft, Search, Filter, Star, Building2, Coins, Home, Plus, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserData } from "@/contexts/UserDataContext";
 
 const BrowseServices = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedService, setSelectedService] = useState<any>(null);
+  const [isBooking, setIsBooking] = useState(false);
   const { toast } = useToast();
   const { userData } = useAuth();
+  const { bookService, userStats } = useUserData();
   const navigate = useNavigate();
 
   // Get wallet balance from userData
@@ -41,7 +44,8 @@ const BrowseServices = () => {
       rating: 4.9,
       reviews: 156,
       image: "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400",
-      features: ["Responsive Design", "SEO Optimized", "Modern Framework", "24/7 Support"]
+      features: ["Responsive Design", "SEO Optimized", "Modern Framework", "24/7 Support"],
+      duration: "30 days"
     },
     {
       id: 2,
@@ -53,7 +57,8 @@ const BrowseServices = () => {
       rating: 4.8,
       reviews: 89,
       image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400",
-      features: ["Social Media", "SEO", "Content Creation", "Analytics"]
+      features: ["Social Media", "SEO", "Content Creation", "Analytics"],
+      duration: "15 days"
     },
     {
       id: 3,
@@ -65,7 +70,8 @@ const BrowseServices = () => {
       rating: 4.7,
       reviews: 234,
       image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400",
-      features: ["Multiple Concepts", "Vector Files", "Brand Guidelines", "Revisions"]
+      features: ["Multiple Concepts", "Vector Files", "Brand Guidelines", "Revisions"],
+      duration: "7 days"
     },
     {
       id: 4,
@@ -77,7 +83,8 @@ const BrowseServices = () => {
       rating: 4.9,
       reviews: 67,
       image: "https://images.unsplash.com/photo-1649972904349-6e44c42644a7?w=400",
-      features: ["Strategy Planning", "Market Analysis", "Growth Plan", "Follow-up"]
+      features: ["Strategy Planning", "Market Analysis", "Growth Plan", "Follow-up"],
+      duration: "21 days"
     },
     {
       id: 5,
@@ -89,7 +96,8 @@ const BrowseServices = () => {
       rating: 4.8,
       reviews: 98,
       image: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=400",
-      features: ["iOS & Android", "Modern UI", "API Integration", "App Store Deploy"]
+      features: ["iOS & Android", "Modern UI", "API Integration", "App Store Deploy"],
+      duration: "45 days"
     },
     {
       id: 6,
@@ -101,7 +109,8 @@ const BrowseServices = () => {
       rating: 4.6,
       reviews: 145,
       image: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=400",
-      features: ["SEO Optimized", "Research-based", "Multiple Drafts", "Quick Delivery"]
+      features: ["SEO Optimized", "Research-based", "Multiple Drafts", "Quick Delivery"],
+      duration: "5 days"
     }
   ];
 
@@ -112,23 +121,41 @@ const BrowseServices = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleBookService = (service: any) => {
-    // Check if user has sufficient balance
-    if (walletBalance < service.price) {
+  // Check if user has already booked a service
+  const isServiceBooked = (serviceId: number) => {
+    return userStats.activeBookings.some(booking => 
+      booking.serviceId === serviceId.toString() && booking.status === 'active'
+    );
+  };
+
+  const handleBookService = async (service: any) => {
+    setIsBooking(true);
+    
+    try {
+      const success = await bookService(service);
+      
+      if (success) {
+        toast({
+          title: "Service Booked Successfully!",
+          description: `${service.title} has been booked for ${service.price} coins. Valid for ${service.duration}.`,
+        });
+        setSelectedService(null);
+      } else {
+        toast({
+          title: "Booking Failed",
+          description: "Insufficient balance or booking error occurred.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Insufficient Balance",
-        description: `You need ${service.price - walletBalance} more coins. Add coins to your wallet first.`,
+        title: "Booking Error",
+        description: "An error occurred while booking the service.",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsBooking(false);
     }
-
-    // Simulate booking
-    toast({
-      title: "Service Booked!",
-      description: `${service.title} has been booked for ${service.price} coins.`,
-    });
-    setSelectedService(null);
   };
 
   const handleAddCoins = () => {
@@ -239,137 +266,185 @@ const BrowseServices = () => {
 
         {/* Services Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredServices.map((service) => (
-            <Card key={service.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 border-2 hover:border-blue-200">
-              <div className="aspect-video bg-gray-200 relative">
-                <img 
-                  src={service.image} 
-                  alt={service.title}
-                  className="w-full h-full object-cover"
-                />
-                {walletBalance < service.price && (
-                  <div className="absolute top-2 right-2">
-                    <Badge variant="destructive" className="bg-red-500">
-                      Insufficient Balance
-                    </Badge>
-                  </div>
-                )}
-              </div>
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start mb-2">
-                  <Badge variant="outline" className="text-xs">{service.category}</Badge>
-                  <div className="flex items-center space-x-1">
-                    <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                    <span className="text-sm text-gray-600">{service.rating}</span>
-                    <span className="text-xs text-gray-400">({service.reviews})</span>
-                  </div>
+          {filteredServices.map((service) => {
+            const isBooked = isServiceBooked(service.id);
+            const insufficientBalance = walletBalance < service.price;
+            
+            return (
+              <Card key={service.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 border-2 hover:border-blue-200">
+                <div className="aspect-video bg-gray-200 relative">
+                  <img 
+                    src={service.image} 
+                    alt={service.title}
+                    className="w-full h-full object-cover"
+                  />
+                  {isBooked && (
+                    <div className="absolute top-2 right-2">
+                      <Badge className="bg-green-500 text-white">
+                        Booked
+                      </Badge>
+                    </div>
+                  )}
+                  {!isBooked && insufficientBalance && (
+                    <div className="absolute top-2 right-2">
+                      <Badge variant="destructive" className="bg-red-500">
+                        Insufficient Balance
+                      </Badge>
+                    </div>
+                  )}
                 </div>
-                <CardTitle className="text-lg leading-tight">{service.title}</CardTitle>
-                <CardDescription className="text-sm line-clamp-2">{service.description}</CardDescription>
-                <div className="flex items-center text-sm text-gray-500 mt-2">
-                  <Building2 className="h-4 w-4 mr-1" />
-                  {service.organization}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center">
-                    <Coins className="h-5 w-5 text-blue-600 mr-1" />
-                    <span className="text-2xl font-bold text-blue-600">{service.price}</span>
-                    <span className="text-gray-500 ml-1">coins</span>
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <Badge variant="outline" className="text-xs">{service.category}</Badge>
+                    <div className="flex items-center space-x-1">
+                      <Star className="h-4 w-4 text-yellow-400 fill-current" />
+                      <span className="text-sm text-gray-600">{service.rating}</span>
+                      <span className="text-xs text-gray-400">({service.reviews})</span>
+                    </div>
                   </div>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button 
-                        onClick={() => setSelectedService(service)}
-                        disabled={walletBalance < service.price}
-                        className={walletBalance < service.price ? "opacity-50 cursor-not-allowed" : ""}
-                      >
-                        {walletBalance < service.price ? "Need More Coins" : "Book Now"}
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle className="text-xl">{service.title}</DialogTitle>
-                        <DialogDescription className="text-base">
-                          by {service.organization}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <img 
-                          src={service.image} 
-                          alt={service.title}
-                          className="w-full h-48 object-cover rounded-lg"
-                        />
-                        <p className="text-gray-700">{service.description}</p>
-                        
-                        <div>
-                          <h4 className="font-semibold mb-2">What's included:</h4>
-                          <ul className="space-y-1">
-                            {service.features.map((feature: string, index: number) => (
-                              <li key={index} className="flex items-center text-sm">
-                                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                                {feature}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Booking Section */}
-                        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm text-gray-600">Service Cost</p>
-                              <div className="flex items-center">
-                                <Coins className="h-5 w-5 text-blue-600 mr-1" />
-                                <span className="text-2xl font-bold text-blue-600">{service.price}</span>
-                                <span className="text-gray-500 ml-1">coins</span>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-600">Your Balance</p>
-                              <div className="flex items-center">
-                                <Wallet className="h-5 w-5 text-green-600 mr-1" />
-                                <span className="text-2xl font-bold text-green-600">{walletBalance}</span>
-                                <span className="text-gray-500 ml-1">coins</span>
-                              </div>
-                            </div>
+                  <CardTitle className="text-lg leading-tight">{service.title}</CardTitle>
+                  <CardDescription className="text-sm line-clamp-2">{service.description}</CardDescription>
+                  <div className="flex items-center text-sm text-gray-500 mt-2">
+                    <Building2 className="h-4 w-4 mr-1" />
+                    {service.organization}
+                  </div>
+                  {service.duration && (
+                    <p className="text-xs text-blue-600 mt-1">Valid for {service.duration}</p>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center">
+                      <Coins className="h-5 w-5 text-blue-600 mr-1" />
+                      <span className="text-2xl font-bold text-blue-600">{service.price}</span>
+                      <span className="text-gray-500 ml-1">coins</span>
+                    </div>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button 
+                          onClick={() => setSelectedService(service)}
+                          disabled={isBooked}
+                          className={
+                            isBooked 
+                              ? "bg-green-100 text-green-800 cursor-not-allowed" 
+                              : insufficientBalance 
+                                ? "opacity-50 cursor-not-allowed" 
+                                : ""
+                          }
+                        >
+                          {isBooked ? "Already Booked" : insufficientBalance ? "Need More Coins" : "Book Now"}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle className="text-xl">{service.title}</DialogTitle>
+                          <DialogDescription className="text-base">
+                            by {service.organization}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <img 
+                            src={service.image} 
+                            alt={service.title}
+                            className="w-full h-48 object-cover rounded-lg"
+                          />
+                          <p className="text-gray-700">{service.description}</p>
+                          
+                          <div>
+                            <h4 className="font-semibold mb-2">What's included:</h4>
+                            <ul className="space-y-1">
+                              {service.features.map((feature: string, index: number) => (
+                                <li key={index} className="flex items-center text-sm">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                                  {feature}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
 
-                          {walletBalance < service.price && (
-                            <div className="bg-red-50 p-3 rounded border border-red-200">
-                              <p className="text-red-800 text-sm font-medium">
-                                You need {service.price - walletBalance} more coins to book this service.
+                          {service.duration && (
+                            <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                              <p className="text-blue-800 text-sm font-medium">
+                                Service Duration: {service.duration}
+                              </p>
+                              <p className="text-blue-700 text-xs mt-1">
+                                This service will be available for the specified duration after booking.
                               </p>
                             </div>
                           )}
 
-                          <div className="flex space-x-2">
-                            {walletBalance >= service.price ? (
-                              <Button 
-                                onClick={() => handleBookService(service)}
-                                className="flex-1"
-                              >
-                                Confirm Booking
-                              </Button>
-                            ) : (
-                              <Button 
-                                onClick={handleAddCoins}
-                                className="flex-1 bg-green-600 hover:bg-green-700"
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Coins
-                              </Button>
+                          {/* Booking Section */}
+                          <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-gray-600">Service Cost</p>
+                                <div className="flex items-center">
+                                  <Coins className="h-5 w-5 text-blue-600 mr-1" />
+                                  <span className="text-2xl font-bold text-blue-600">{service.price}</span>
+                                  <span className="text-gray-500 ml-1">coins</span>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Your Balance</p>
+                                <div className="flex items-center">
+                                  <Wallet className="h-5 w-5 text-green-600 mr-1" />
+                                  <span className="text-2xl font-bold text-green-600">{walletBalance}</span>
+                                  <span className="text-gray-500 ml-1">coins</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {isBooked && (
+                              <div className="bg-green-50 p-3 rounded border border-green-200">
+                                <p className="text-green-800 text-sm font-medium">
+                                  ✅ You have already booked this service!
+                                </p>
+                              </div>
                             )}
+
+                            {!isBooked && insufficientBalance && (
+                              <div className="bg-red-50 p-3 rounded border border-red-200">
+                                <p className="text-red-800 text-sm font-medium">
+                                  You need {service.price - walletBalance} more coins to book this service.
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="flex space-x-2">
+                              {!isBooked && walletBalance >= service.price ? (
+                                <Button 
+                                  onClick={() => handleBookService(service)}
+                                  className="flex-1"
+                                  disabled={isBooking}
+                                >
+                                  {isBooking ? "Booking..." : "Confirm Booking"}
+                                </Button>
+                              ) : !isBooked ? (
+                                <Button 
+                                  onClick={handleAddCoins}
+                                  className="flex-1 bg-green-600 hover:bg-green-700"
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Coins
+                                </Button>
+                              ) : (
+                                <Button 
+                                  className="flex-1 bg-green-100 text-green-800 cursor-not-allowed"
+                                  disabled
+                                >
+                                  Already Booked
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {filteredServices.length === 0 && (

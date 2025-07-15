@@ -1,4 +1,4 @@
-
+// src/pages/user/AddCoins.tsx - Updated with real payment integration
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Coins, CreditCard, Smartphone, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserData } from "@/contexts/UserDataContext";
 
 const AddCoins = () => {
   const [amount, setAmount] = useState("");
@@ -15,8 +17,19 @@ const AddCoins = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { userData } = useAuth();
+  const { addCoins } = useUserData();
 
   const quickAmounts = [100, 500, 1000, 2000, 5000];
+
+  const getPaymentMethodName = (method: string) => {
+    switch (method) {
+      case 'upi': return 'UPI Payment';
+      case 'card': return 'Credit/Debit Card';
+      case 'wallet': return 'Digital Wallet';
+      default: return 'UPI Payment';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,27 +44,48 @@ const AddCoins = () => {
       return;
     }
 
+    if (numAmount > 50000) {
+      toast({
+        title: "Amount Too Large",
+        description: "Maximum amount is ₹50,000 per transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate payment processing
-    setTimeout(() => {
-      // Update user balance in localStorage
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const user = JSON.parse(userData);
-        user.walletBalance = (user.walletBalance || 0) + numAmount;
-        localStorage.setItem('user', JSON.stringify(user));
+    try {
+      // Simulate payment processing with realistic delay
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Add coins using the UserData context
+      const success = await addCoins(numAmount, getPaymentMethodName(paymentMethod));
+
+      if (success) {
+        toast({
+          title: "Payment Successful!",
+          description: `₹${numAmount} converted to ${numAmount} ErthaCoins. Your new balance: ${(userData?.walletBalance || 0) + numAmount} coins`,
+        });
+
+        // Navigate back to dashboard after successful payment
+        navigate('/dashboard/user');
+      } else {
+        throw new Error('Payment processing failed');
       }
-
+    } catch (error) {
       toast({
-        title: "Payment Successful!",
-        description: `₹${numAmount} converted to ${numAmount} ErthaCoins`,
+        title: "Payment Failed",
+        description: "There was an error processing your payment. Please try again.",
+        variant: "destructive",
       });
-
+    } finally {
       setIsLoading(false);
-      navigate('/dashboard/user');
-    }, 2000);
+    }
   };
+
+  const currentBalance = userData?.walletBalance || 0;
+  const newBalance = currentBalance + (parseInt(amount) || 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -86,6 +120,18 @@ const AddCoins = () => {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Current Balance Display */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-700 font-medium">Current Balance</span>
+                    <div className="flex items-center space-x-1">
+                      <Coins className="h-4 w-4 text-blue-600" />
+                      <span className="text-lg font-bold text-blue-600">{currentBalance}</span>
+                      <span className="text-blue-600">coins</span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Quick Amount Selection */}
                 <div className="space-y-3">
                   <Label>Quick Select</Label>
@@ -114,10 +160,28 @@ const AddCoins = () => {
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     min="10"
+                    max="50000"
                     required
                   />
-                  <p className="text-sm text-gray-500">Minimum: ₹10</p>
+                  <p className="text-sm text-gray-500">Minimum: ₹10 | Maximum: ₹50,000</p>
                 </div>
+
+                {/* New Balance Preview */}
+                {amount && parseInt(amount) >= 10 && (
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-green-700 font-medium">New Balance</span>
+                      <div className="flex items-center space-x-1">
+                        <Coins className="h-4 w-4 text-green-600" />
+                        <span className="text-lg font-bold text-green-600">{newBalance}</span>
+                        <span className="text-green-600">coins</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-green-600 mt-1">
+                      +{parseInt(amount)} coins will be added
+                    </p>
+                  </div>
+                )}
 
                 {/* Payment Method */}
                 <div className="space-y-3">
@@ -172,8 +236,19 @@ const AddCoins = () => {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Processing Payment..." : `Pay ₹${amount || "0"}`}
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={isLoading || !amount || parseInt(amount) < 10}
+                >
+                  {isLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                      <span>Processing Payment...</span>
+                    </div>
+                  ) : (
+                    `Pay ₹${amount || "0"}`
+                  )}
                 </Button>
               </form>
             </CardContent>
@@ -198,6 +273,10 @@ const AddCoins = () => {
                   <span className="text-gray-600">Processing Fee</span>
                   <span className="font-medium text-green-600">₹0</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Payment Method</span>
+                  <span className="font-medium text-sm">{getPaymentMethodName(paymentMethod)}</span>
+                </div>
                 <div className="border-t pt-3">
                   <div className="flex justify-between">
                     <span className="font-semibold">Total</span>
@@ -221,6 +300,15 @@ const AddCoins = () => {
                 <p className="text-sm text-green-800">
                   Your payment is secured with bank-grade encryption and processed through trusted payment partners.
                 </p>
+              </div>
+
+              {/* Transaction History Link */}
+              <div className="pt-4 border-t">
+                <Link to="/transactions">
+                  <Button variant="outline" className="w-full">
+                    View Transaction History
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>

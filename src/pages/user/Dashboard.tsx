@@ -1,23 +1,20 @@
-// src/pages/user/Dashboard.tsx - Updated with home navigation
+// src/pages/user/Dashboard.tsx - Updated with real user data
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Plus, ShoppingBag, Receipt, ArrowRight, Wallet, TrendingUp, Home, Menu } from "lucide-react";
+import { Coins, Plus, ShoppingBag, Receipt, ArrowRight, Wallet, TrendingUp, Home, Menu, Calendar, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserData } from "@/contexts/UserDataContext";
 
 const UserDashboard = () => {
   const { userData, logout } = useAuth();
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [recentTransactions, setRecentTransactions] = useState([
-    { id: 1, type: 'spent', service: 'Web Development', amount: 200, date: '2024-01-15' },
-    { id: 2, type: 'added', service: 'Wallet Top-up', amount: 500, date: '2024-01-14' },
-    { id: 3, type: 'spent', service: 'Digital Marketing', amount: 50, date: '2024-01-13' },
-  ]);
+  const { userStats, getRecentActivity } = useUserData();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
     if (!userData) {
@@ -35,8 +32,9 @@ const UserDashboard = () => {
       return;
     }
 
-    setWalletBalance(userData.walletBalance || 0);
-  }, [navigate, toast, userData]);
+    // Load recent activity
+    setRecentActivity(getRecentActivity());
+  }, [navigate, toast, userData, userStats]);
 
   const handleLogout = async () => {
     try {
@@ -56,6 +54,50 @@ const UserDashboard = () => {
     }
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return 'Today';
+    if (diffDays === 2) return 'Yesterday';
+    if (diffDays <= 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getActivityIcon = (activity: any) => {
+    if ('activityType' in activity && activity.activityType === 'booking') {
+      return <CheckCircle className="h-4 w-4 text-green-600" />;
+    }
+    return activity.type === 'spent' 
+      ? <TrendingUp className="h-4 w-4 text-red-600 rotate-45" />
+      : <TrendingUp className="h-4 w-4 text-green-600" />;
+  };
+
+  const getActivityText = (activity: any) => {
+    if ('activityType' in activity && activity.activityType === 'booking') {
+      return `Booked ${activity.serviceName}`;
+    }
+    return activity.type === 'spent' 
+      ? `Spent on ${activity.service || 'Service'}`
+      : `Added to wallet`;
+  };
+
+  const getActivityAmount = (activity: any) => {
+    if ('activityType' in activity && activity.activityType === 'booking') {
+      return `${activity.price} coins`;
+    }
+    return `${activity.type === 'spent' ? '-' : '+'}${activity.amount} coins`;
+  };
+
+  const getActivityDate = (activity: any) => {
+    if ('activityType' in activity && activity.activityType === 'booking') {
+      return formatDate(activity.bookedAt);
+    }
+    return formatDate(activity.date);
+  };
+
   if (!userData) return null;
 
   return (
@@ -65,13 +107,11 @@ const UserDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              {/* Logo that links to home */}
               <Link to="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
                 <Coins className="h-8 w-8 text-blue-600" />
                 <span className="text-xl font-bold text-gray-900">ErthaExchange</span>
               </Link>
               
-              {/* Breadcrumb */}
               <div className="hidden md:flex items-center space-x-2 text-sm text-gray-500">
                 <Link to="/" className="hover:text-blue-600 transition-colors">Home</Link>
                 <span>/</span>
@@ -79,7 +119,6 @@ const UserDashboard = () => {
               </div>
             </div>
 
-            {/* Navigation Links */}
             <nav className="hidden md:flex items-center space-x-6">
               <Link to="/" className="text-gray-700 hover:text-blue-600 transition-colors flex items-center">
                 <Home className="h-4 w-4 mr-1" />
@@ -88,7 +127,6 @@ const UserDashboard = () => {
               <Link to="/services" className="text-gray-700 hover:text-blue-600 transition-colors">Services</Link>
               <Link to="/transactions" className="text-gray-700 hover:text-blue-600 transition-colors">Transactions</Link>
               
-              {/* User Menu */}
               <div className="flex items-center space-x-3 ml-6 pl-6 border-l border-gray-200">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-medium text-gray-900">{userData.name}</p>
@@ -100,7 +138,6 @@ const UserDashboard = () => {
               </div>
             </nav>
 
-            {/* Mobile Menu Button */}
             <div className="md:hidden">
               <Button variant="ghost" size="icon">
                 <Menu className="h-5 w-5" />
@@ -119,7 +156,6 @@ const UserDashboard = () => {
               <p className="text-gray-600">Manage your coins and explore amazing services</p>
             </div>
             
-            {/* Quick Actions */}
             <div className="hidden md:flex items-center space-x-3">
               <Link to="/">
                 <Button variant="outline" size="sm">
@@ -151,7 +187,7 @@ const UserDashboard = () => {
                     <CardTitle className="text-white mb-2 text-xl">Your Wallet</CardTitle>
                     <div className="flex items-center space-x-2">
                       <Wallet className="h-6 w-6" />
-                      <span className="text-4xl font-bold">{walletBalance}</span>
+                      <span className="text-4xl font-bold">{userData.walletBalance || 0}</span>
                       <span className="text-xl opacity-90">ErthaCoins</span>
                     </div>
                     <p className="text-blue-100 text-sm mt-2">Available for spending</p>
@@ -217,13 +253,13 @@ const UserDashboard = () => {
               </Card>
             </div>
 
-            {/* Recent Transactions */}
+            {/* Recent Activity */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>Your latest transactions</CardDescription>
+                    <CardDescription>Your latest transactions and bookings</CardDescription>
                   </div>
                   <Link to="/transactions">
                     <Button variant="ghost" size="sm">
@@ -235,32 +271,50 @@ const UserDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentTransactions.map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                      <div className="flex items-center space-x-3">
-                        <div className={`p-2 rounded-full ${
-                          transaction.type === 'spent' ? 'bg-red-100' : 'bg-green-100'
-                        }`}>
-                          {transaction.type === 'spent' ? (
-                            <ArrowRight className="h-4 w-4 text-red-600 rotate-45" />
-                          ) : (
-                            <TrendingUp className="h-4 w-4 text-green-600" />
+                  {recentActivity.length > 0 ? (
+                    recentActivity.map((activity, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 rounded-full bg-white">
+                            {getActivityIcon(activity)}
+                          </div>
+                          <div>
+                            <p className="font-medium">{getActivityText(activity)}</p>
+                            <p className="text-sm text-gray-500">
+                              {'organization' in activity ? activity.organization : 
+                               'activityType' in activity && activity.activityType === 'booking' ? activity.organization :
+                               'ErthaExchange'}
+                            </p>
+                            <p className="text-xs text-gray-400">{getActivityDate(activity)}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-blue-600">
+                            {getActivityAmount(activity)}
+                          </p>
+                          {'activityType' in activity && activity.activityType === 'booking' && (
+                            <Badge className="text-xs bg-green-100 text-green-800 mt-1">
+                              Booked
+                            </Badge>
                           )}
                         </div>
-                        <div>
-                          <p className="font-medium">{transaction.service}</p>
-                          <p className="text-sm text-gray-500">{transaction.date}</p>
-                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`font-semibold ${
-                          transaction.type === 'spent' ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          {transaction.type === 'spent' ? '-' : '+'}{transaction.amount} coins
-                        </p>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No activity yet</h3>
+                      <p className="text-gray-600 mb-4">Start by browsing services or adding coins to your wallet</p>
+                      <div className="flex space-x-2 justify-center">
+                        <Link to="/services">
+                          <Button size="sm">Browse Services</Button>
+                        </Link>
+                        <Link to="/wallet/add">
+                          <Button size="sm" variant="outline">Add Coins</Button>
+                        </Link>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -276,22 +330,60 @@ const UserDashboard = () => {
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Total Spent</span>
-                  <Badge variant="secondary" className="font-semibold">250 coins</Badge>
+                  <Badge variant="secondary" className="font-semibold">{userStats.totalSpent} coins</Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Services Used</span>
-                  <Badge variant="secondary" className="font-semibold">12</Badge>
+                  <Badge variant="secondary" className="font-semibold">{userStats.servicesUsed}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Member Since</span>
-                  <Badge variant="secondary" className="font-semibold">Jan 2024</Badge>
+                  <Badge variant="secondary" className="font-semibold">{userStats.memberSince}</Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Status</span>
-                  <Badge className="bg-green-100 text-green-800">Active</Badge>
+                  <Badge className={userStats.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                    {userStats.status}
+                  </Badge>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Active Services */}
+            {userStats.activeBookings.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Active Services</CardTitle>
+                  <CardDescription>Your current bookings</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {userStats.activeBookings.slice(0, 3).map((booking) => (
+                    <div key={booking.id} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-sm">{booking.serviceName}</h4>
+                        <Badge className="text-xs bg-green-100 text-green-800">
+                          Active
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600">{booking.organization}</p>
+                      <p className="text-xs text-gray-500">
+                        Booked: {formatDate(booking.bookedAt)}
+                      </p>
+                      {booking.expiresAt && (
+                        <p className="text-xs text-orange-600">
+                          Expires: {formatDate(booking.expiresAt)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {userStats.activeBookings.length > 3 && (
+                    <p className="text-sm text-gray-500 text-center">
+                      +{userStats.activeBookings.length - 3} more services
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Quick Top-up */}
             <Card>
