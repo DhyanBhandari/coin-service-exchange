@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.tsx - Fixed with better error handling
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { FirebaseAuthService } from '../lib/firebase';
@@ -48,30 +49,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const signUp = async (email: string, password: string, displayName: string, role: 'user' | 'org' = 'user') => {
-    const result = await FirebaseAuthService.signUp(email, password, displayName, role);
-    setUserData(result.userData);
-    // Store in localStorage for immediate access
-    localStorage.setItem('user', JSON.stringify(result.userData));
-    localStorage.setItem('token', await result.user.getIdToken());
-    return result;
+    try {
+      const result = await FirebaseAuthService.signUp(email, password, displayName, role);
+      setUserData(result.userData);
+      // Store in localStorage for immediate access
+      localStorage.setItem('user', JSON.stringify(result.userData));
+      localStorage.setItem('token', await result.user.getIdToken());
+      return result;
+    } catch (error: any) {
+      console.error('Signup error in context:', error);
+      throw error;
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const result = await FirebaseAuthService.signIn(email, password);
-    setUserData(result.userData);
-    // Store in localStorage
-    localStorage.setItem('user', JSON.stringify(result.userData));
-    localStorage.setItem('token', await result.user.getIdToken());
-    return result;
+    try {
+      const result = await FirebaseAuthService.signIn(email, password);
+      setUserData(result.userData);
+      // Store in localStorage
+      localStorage.setItem('user', JSON.stringify(result.userData));
+      localStorage.setItem('token', await result.user.getIdToken());
+      return result;
+    } catch (error: any) {
+      console.error('Signin error in context:', error);
+      throw error;
+    }
   };
 
   const signInWithGoogle = async (role: 'user' | 'org' = 'user') => {
-    const result = await FirebaseAuthService.signInWithGoogle(role);
-    setUserData(result.userData);
-    // Store in localStorage
-    localStorage.setItem('user', JSON.stringify(result.userData));
-    localStorage.setItem('token', await result.user.getIdToken());
-    return result;
+    try {
+      const result = await FirebaseAuthService.signInWithGoogle(role);
+      setUserData(result.userData);
+      // Store in localStorage
+      localStorage.setItem('user', JSON.stringify(result.userData));
+      localStorage.setItem('token', await result.user.getIdToken());
+      return result;
+    } catch (error: any) {
+      console.error('Google signin error in context:', error);
+      throw error;
+    }
   };
 
   const resetPassword = (email: string) => {
@@ -79,15 +95,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
-    await FirebaseAuthService.signOut();
-    setUserData(null);
+    try {
+      await FirebaseAuthService.signOut();
+      setUserData(null);
+      // Clear localStorage
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      localStorage.removeItem('auth');
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Clear state anyway
+      setUserData(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      localStorage.removeItem('auth');
+    }
   };
 
   const refreshUserData = async () => {
     if (currentUser) {
       try {
         const token = await currentUser.getIdToken(true);
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/profile`, {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+        
+        const response = await fetch(`${apiUrl}/auth/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -98,6 +129,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUserData(data.data);
           localStorage.setItem('user', JSON.stringify(data.data));
           localStorage.setItem('token', token);
+        } else {
+          console.warn('Failed to refresh user data:', response.status);
         }
       } catch (error) {
         console.error('Failed to refresh user data:', error);
@@ -106,46 +139,79 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const getToken = async (): Promise<string | null> => {
-    return await FirebaseAuthService.getToken();
+    try {
+      return await FirebaseAuthService.getToken();
+    } catch (error) {
+      console.error('Failed to get token:', error);
+      return null;
+    }
   };
 
   useEffect(() => {
     const unsubscribe = FirebaseAuthService.onAuthStateChange(async (user) => {
+      setCurrentUser(user);
+      
       if (user) {
-        setCurrentUser(user);
-        
         try {
           // Get fresh token and update localStorage
           const token = await user.getIdToken();
           localStorage.setItem('token', token);
           
-          // If we don't have userData, fetch it from backend
-          if (!userData) {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/profile`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
+          // Try to get user data from localStorage first
+          const storedUserData = localStorage.getItem('user');
+          if (storedUserData) {
+            const parsedUserData = JSON.parse(storedUserData);
+            setUserData(parsedUserData);
+          }
+          
+          // If we don't have userData or if it's stale, fetch from backend
+          if (!userData || !storedUserData) {
+            try {
+              const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+              const response = await fetch(`${apiUrl}/auth/profile`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                setUserData(data.data);
+                localStorage.setItem('user', JSON.stringify(data.data));
+              } else {
+                console.warn('Failed to fetch user profile from backend:', response.status);
+                // If backend fails but we have a Firebase user, create minimal user data
+                if (!storedUserData) {
+                  const fallbackUserData = {
+                    id: 0,
+                    firebaseUid: user.uid,
+                    email: user.email || '',
+                    name: user.displayName || user.email?.split('@')[0] || 'User',
+                    role: 'user' as const,
+                    walletBalance: 0,
+                    emailVerified: user.emailVerified,
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                  };
+                  setUserData(fallbackUserData);
+                  localStorage.setItem('user', JSON.stringify(fallbackUserData));
+                }
               }
-            });
-            
-            if (response.ok) {
-              const data = await response.json();
-              setUserData(data.data);
-              localStorage.setItem('user', JSON.stringify(data.data));
-            } else {
-              // If profile fetch fails, user might not exist in backend
-              console.warn('Failed to fetch user profile from backend');
+            } catch (fetchError) {
+              console.error('Error fetching user profile:', fetchError);
             }
           }
         } catch (error) {
           console.error('Failed to handle auth state change:', error);
         }
       } else {
-        setCurrentUser(null);
         setUserData(null);
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         localStorage.removeItem('auth');
       }
+      
       setLoading(false);
     });
 

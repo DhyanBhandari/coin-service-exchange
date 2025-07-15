@@ -1,3 +1,4 @@
+// src/lib/firebase.ts - Fixed Firebase Configuration
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -29,6 +30,16 @@ export const auth = getAuth(app);
 // Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
 
+// Get the correct API URL
+const getApiUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (!apiUrl || apiUrl === 'undefined') {
+    console.warn('VITE_API_URL not set, using fallback');
+    return 'http://localhost:5000/api/v1';
+  }
+  return apiUrl;
+};
+
 // Firebase Auth Service
 export class FirebaseAuthService {
   
@@ -45,7 +56,8 @@ export class FirebaseAuthService {
       await sendEmailVerification(user);
       
       // Create user in your backend with Firebase UID
-      const backendResponse = await fetch(`${import.meta.env.VITE_API_URL}/auth/firebase-register`, {
+      const apiUrl = getApiUrl();
+      const backendResponse = await fetch(`${apiUrl}/auth/firebase-register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,19 +73,36 @@ export class FirebaseAuthService {
       });
       
       if (!backendResponse.ok) {
-        const errorData = await backendResponse.json();
-        throw new Error(errorData.message || 'Failed to create user in backend');
+        const errorText = await backendResponse.text();
+        console.error('Backend response error:', errorText);
+        throw new Error(`Failed to create user in backend: ${backendResponse.status}`);
       }
       
       const userData = await backendResponse.json();
       return { user, userData: userData.data };
       
     } catch (error: any) {
+      console.error('Firebase signup error:', error);
+      
       // Clean up Firebase user if backend creation fails
-      if (auth.currentUser) {
-        await auth.currentUser.delete();
+      if (auth.currentUser && error.message.includes('backend')) {
+        try {
+          await auth.currentUser.delete();
+        } catch (deleteError) {
+          console.error('Failed to cleanup Firebase user:', deleteError);
+        }
       }
-      throw new Error(error.message);
+      
+      // Map Firebase errors to user-friendly messages
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error('An account with this email already exists');
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error('Password is too weak');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('Invalid email address');
+      }
+      
+      throw error;
     }
   }
   
@@ -84,7 +113,8 @@ export class FirebaseAuthService {
       const user = userCredential.user;
       
       // Get user data from your backend
-      const backendResponse = await fetch(`${import.meta.env.VITE_API_URL}/auth/firebase-login`, {
+      const apiUrl = getApiUrl();
+      const backendResponse = await fetch(`${apiUrl}/auth/firebase-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,15 +128,27 @@ export class FirebaseAuthService {
       });
       
       if (!backendResponse.ok) {
-        const errorData = await backendResponse.json();
-        throw new Error(errorData.message || 'Failed to authenticate with backend');
+        const errorText = await backendResponse.text();
+        console.error('Backend login error:', errorText);
+        throw new Error(`Failed to authenticate with backend: ${backendResponse.status}`);
       }
       
       const userData = await backendResponse.json();
       return { user, userData: userData.data };
       
     } catch (error: any) {
-      throw new Error(error.message);
+      console.error('Firebase signin error:', error);
+      
+      // Map Firebase errors to user-friendly messages
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+        throw new Error('Invalid email or password');
+      } else if (error.code === 'auth/user-not-found') {
+        throw new Error('No account found with this email');
+      } else if (error.code === 'auth/too-many-requests') {
+        throw new Error('Too many failed attempts. Please try again later');
+      }
+      
+      throw error;
     }
   }
   
@@ -117,7 +159,8 @@ export class FirebaseAuthService {
       const user = result.user;
       
       // Check if user exists in backend first
-      let backendResponse = await fetch(`${import.meta.env.VITE_API_URL}/auth/firebase-login`, {
+      const apiUrl = getApiUrl();
+      let backendResponse = await fetch(`${apiUrl}/auth/firebase-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -134,7 +177,7 @@ export class FirebaseAuthService {
       
       if (!backendResponse.ok) {
         // User doesn't exist, create new user
-        backendResponse = await fetch(`${import.meta.env.VITE_API_URL}/auth/firebase-register`, {
+        backendResponse = await fetch(`${apiUrl}/auth/firebase-register`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -150,8 +193,9 @@ export class FirebaseAuthService {
         });
         
         if (!backendResponse.ok) {
-          const errorData = await backendResponse.json();
-          throw new Error(errorData.message || 'Failed to create user in backend');
+          const errorText = await backendResponse.text();
+          console.error('Backend registration error:', errorText);
+          throw new Error(`Failed to create user in backend: ${backendResponse.status}`);
         }
       }
       
@@ -159,7 +203,15 @@ export class FirebaseAuthService {
       return { user, userData: userData.data };
       
     } catch (error: any) {
-      throw new Error(error.message);
+      console.error('Google signin error:', error);
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Google sign-in was cancelled');
+      } else if (error.code === 'auth/popup-blocked') {
+        throw new Error('Pop-up was blocked. Please allow pop-ups and try again');
+      }
+      
+      throw error;
     }
   }
   
@@ -169,7 +221,14 @@ export class FirebaseAuthService {
       await sendPasswordResetEmail(auth, email);
       return { success: true, message: 'Password reset email sent' };
     } catch (error: any) {
-      throw new Error(error.message);
+      console.error('Password reset error:', error);
+      
+      if (error.code === 'auth/user-not-found') {
+        // Don't reveal if email exists for security
+        return { success: true, message: 'If an account with that email exists, a password reset link has been sent' };
+      }
+      
+      throw error;
     }
   }
   
@@ -183,7 +242,8 @@ export class FirebaseAuthService {
       localStorage.removeItem('auth');
       return { success: true };
     } catch (error: any) {
-      throw new Error(error.message);
+      console.error('Signout error:', error);
+      throw error;
     }
   }
   
@@ -196,7 +256,12 @@ export class FirebaseAuthService {
   static async getToken(): Promise<string | null> {
     const user = auth.currentUser;
     if (user) {
-      return await user.getIdToken(true);
+      try {
+        return await user.getIdToken(true);
+      } catch (error) {
+        console.error('Failed to get token:', error);
+        return null;
+      }
     }
     return null;
   }

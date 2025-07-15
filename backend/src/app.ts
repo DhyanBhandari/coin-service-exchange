@@ -42,13 +42,13 @@ app.use(helmet({
 }));
 
 // Enhanced CORS configuration for frontend integration
+// Enhanced CORS configuration for frontend integration
 app.use(cors({
     origin: [
-        'https://coin-service-exchange-frontend.bolt.run',
-        'https://coin-service-exchange.bolt.run',
         'http://localhost:8080',  // Vite dev server
-        'http://localhost:3000',  // React dev server
+        'http://localhost:3000',  // React dev server  
         'http://localhost:5173',  // Alternative Vite port
+        'http://localhost:4173',  // Vite preview
         process.env.FRONTEND_URL || 'http://localhost:8080'
     ],
     credentials: true,
@@ -83,35 +83,35 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.set('trust proxy', 1);
 
 // Root route handler
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
     res.json(
-        createApiResponse(true, 'ErthaExchange Backend API', {
+        createApiResponse(true, {
             version: 'v1',
             status: 'operational',
             timestamp: new Date().toISOString(),
             documentation: '/api',
             health: '/health'
-        })
+        }, 'ErthaExchange Backend API')
     );
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
     res.json(
-        createApiResponse(true, 'Server is healthy', {
+        createApiResponse(true, {
             status: 'healthy',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             environment: process.env.NODE_ENV,
             version: process.env.npm_package_version || '1.0.0'
-        })
+        }, 'Server is healthy')
     );
 });
 
 // API documentation endpoint
-app.get('/api', (req, res) => {
+app.get('/api', (_req, res) => {
     res.json(
-        createApiResponse(true, 'ErthaExchange API', {
+        createApiResponse(true, {
             version: 'v1',
             documentation: '/api/docs',
             endpoints: {
@@ -123,7 +123,7 @@ app.get('/api', (req, res) => {
                 transactions: `${API_PREFIX}/transactions`,
                 admin: `${API_PREFIX}/admin`
             }
-        })
+        }, 'ErthaExchange API')
     );
 });
 

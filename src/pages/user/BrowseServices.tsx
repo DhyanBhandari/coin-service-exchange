@@ -1,19 +1,25 @@
-
-import { useState } from "react";
-import { Link } from "react-router-dom";
+// src/pages/user/BrowseServices.tsx - Updated with wallet balance and navigation
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Search, Filter, Star, Building2, Coins } from "lucide-react";
+import { ArrowLeft, Search, Filter, Star, Building2, Coins, Home, Plus, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BrowseServices = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedService, setSelectedService] = useState<any>(null);
   const { toast } = useToast();
+  const { userData } = useAuth();
+  const navigate = useNavigate();
+
+  // Get wallet balance from userData
+  const walletBalance = userData?.walletBalance || 0;
 
   const categories = [
     { id: "all", name: "All Services" },
@@ -107,6 +113,16 @@ const BrowseServices = () => {
   });
 
   const handleBookService = (service: any) => {
+    // Check if user has sufficient balance
+    if (walletBalance < service.price) {
+      toast({
+        title: "Insufficient Balance",
+        description: `You need ${service.price - walletBalance} more coins. Add coins to your wallet first.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Simulate booking
     toast({
       title: "Service Booked!",
@@ -115,31 +131,64 @@ const BrowseServices = () => {
     setSelectedService(null);
   };
 
+  const handleAddCoins = () => {
+    navigate('/wallet/add');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Link to="/dashboard/user" className="flex items-center text-gray-600 hover:text-blue-600 mr-6">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                Back to Dashboard
+            <div className="flex items-center space-x-4">
+              <Link to="/" className="flex items-center text-gray-600 hover:text-blue-600 transition-colors">
+                <Home className="h-5 w-5 mr-2" />
+                Home
               </Link>
+              <span className="text-gray-300">/</span>
               <div className="flex items-center space-x-2">
                 <Building2 className="h-6 w-6 text-blue-600" />
-                <span className="text-lg font-semibold">Browse Services</span>
+                <span className="text-lg font-semibold text-gray-900">Browse Services</span>
               </div>
             </div>
-            <Badge variant="secondary" className="hidden md:flex">
-              <Coins className="h-4 w-4 mr-1" />
-              Balance: 500 coins
-            </Badge>
+
+            {/* Wallet Balance Display */}
+            <div className="flex items-center space-x-4">
+              <div className="bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+                <div className="flex items-center space-x-2">
+                  <Wallet className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-blue-600 font-medium">Wallet Balance</p>
+                    <div className="flex items-center space-x-1">
+                      <Coins className="h-4 w-4 text-blue-600" />
+                      <span className="text-lg font-bold text-blue-600">{walletBalance}</span>
+                      <span className="text-sm text-blue-500">coins</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <Button 
+                size="sm" 
+                onClick={handleAddCoins}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Coins
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header Info */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Explore Services</h1>
+          <p className="text-gray-600">Discover amazing services from verified organizations</p>
+        </div>
+
         {/* Search and Filter */}
         <div className="mb-8 space-y-4">
           <div className="relative">
@@ -148,7 +197,7 @@ const BrowseServices = () => {
               placeholder="Search services..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 h-12 text-lg"
             />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -158,6 +207,7 @@ const BrowseServices = () => {
                 variant={selectedCategory === category.id ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory(category.id)}
+                className="transition-all duration-200"
               >
                 {category.name}
               </Button>
@@ -165,34 +215,63 @@ const BrowseServices = () => {
           </div>
         </div>
 
+        {/* Low Balance Warning */}
+        {walletBalance < 50 && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-yellow-100 p-2 rounded-full">
+                  <Wallet className="h-5 w-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-yellow-900">Low Balance</h3>
+                  <p className="text-sm text-yellow-700">
+                    You have {walletBalance} coins. Consider adding more coins to access premium services.
+                  </p>
+                </div>
+              </div>
+              <Button onClick={handleAddCoins} size="sm" className="bg-yellow-600 hover:bg-yellow-700">
+                Add Coins
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Services Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredServices.map((service) => (
-            <Card key={service.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="aspect-video bg-gray-200">
+            <Card key={service.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 border-2 hover:border-blue-200">
+              <div className="aspect-video bg-gray-200 relative">
                 <img 
                   src={service.image} 
                   alt={service.title}
                   className="w-full h-full object-cover"
                 />
+                {walletBalance < service.price && (
+                  <div className="absolute top-2 right-2">
+                    <Badge variant="destructive" className="bg-red-500">
+                      Insufficient Balance
+                    </Badge>
+                  </div>
+                )}
               </div>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex justify-between items-start mb-2">
-                  <Badge variant="outline">{service.category}</Badge>
-                  <div className="flex items-center">
+                  <Badge variant="outline" className="text-xs">{service.category}</Badge>
+                  <div className="flex items-center space-x-1">
                     <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                    <span className="text-sm text-gray-600 ml-1">{service.rating}</span>
-                    <span className="text-sm text-gray-400 ml-1">({service.reviews})</span>
+                    <span className="text-sm text-gray-600">{service.rating}</span>
+                    <span className="text-xs text-gray-400">({service.reviews})</span>
                   </div>
                 </div>
-                <CardTitle className="text-lg">{service.title}</CardTitle>
-                <CardDescription>{service.description}</CardDescription>
+                <CardTitle className="text-lg leading-tight">{service.title}</CardTitle>
+                <CardDescription className="text-sm line-clamp-2">{service.description}</CardDescription>
                 <div className="flex items-center text-sm text-gray-500 mt-2">
                   <Building2 className="h-4 w-4 mr-1" />
                   {service.organization}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center">
                     <Coins className="h-5 w-5 text-blue-600 mr-1" />
@@ -201,12 +280,18 @@ const BrowseServices = () => {
                   </div>
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button onClick={() => setSelectedService(service)}>Book Now</Button>
+                      <Button 
+                        onClick={() => setSelectedService(service)}
+                        disabled={walletBalance < service.price}
+                        className={walletBalance < service.price ? "opacity-50 cursor-not-allowed" : ""}
+                      >
+                        {walletBalance < service.price ? "Need More Coins" : "Book Now"}
+                      </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl">
                       <DialogHeader>
-                        <DialogTitle>{service.title}</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-xl">{service.title}</DialogTitle>
+                        <DialogDescription className="text-base">
                           by {service.organization}
                         </DialogDescription>
                       </DialogHeader>
@@ -230,18 +315,53 @@ const BrowseServices = () => {
                           </ul>
                         </div>
 
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="text-sm text-gray-600">Total Cost</p>
-                            <div className="flex items-center">
-                              <Coins className="h-5 w-5 text-blue-600 mr-1" />
-                              <span className="text-2xl font-bold text-blue-600">{service.price}</span>
-                              <span className="text-gray-500 ml-1">coins</span>
+                        {/* Booking Section */}
+                        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm text-gray-600">Service Cost</p>
+                              <div className="flex items-center">
+                                <Coins className="h-5 w-5 text-blue-600 mr-1" />
+                                <span className="text-2xl font-bold text-blue-600">{service.price}</span>
+                                <span className="text-gray-500 ml-1">coins</span>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600">Your Balance</p>
+                              <div className="flex items-center">
+                                <Wallet className="h-5 w-5 text-green-600 mr-1" />
+                                <span className="text-2xl font-bold text-green-600">{walletBalance}</span>
+                                <span className="text-gray-500 ml-1">coins</span>
+                              </div>
                             </div>
                           </div>
-                          <Button onClick={() => handleBookService(service)}>
-                            Confirm Booking
-                          </Button>
+
+                          {walletBalance < service.price && (
+                            <div className="bg-red-50 p-3 rounded border border-red-200">
+                              <p className="text-red-800 text-sm font-medium">
+                                You need {service.price - walletBalance} more coins to book this service.
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="flex space-x-2">
+                            {walletBalance >= service.price ? (
+                              <Button 
+                                onClick={() => handleBookService(service)}
+                                className="flex-1"
+                              >
+                                Confirm Booking
+                              </Button>
+                            ) : (
+                              <Button 
+                                onClick={handleAddCoins}
+                                className="flex-1 bg-green-600 hover:bg-green-700"
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Coins
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </DialogContent>
@@ -256,7 +376,10 @@ const BrowseServices = () => {
           <div className="text-center py-12">
             <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No services found</h3>
-            <p className="text-gray-500">Try adjusting your search or filter criteria</p>
+            <p className="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
+            <Button onClick={() => {setSearchTerm(""); setSelectedCategory("all");}}>
+              Clear Filters
+            </Button>
           </div>
         )}
       </div>
