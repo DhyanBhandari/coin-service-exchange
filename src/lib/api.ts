@@ -94,35 +94,6 @@ class ApiClient {
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
-
-  // File upload method
-  async upload<T>(endpoint: string, formData: FormData): Promise<ApiResponse<T>> {
-    try {
-      const token = await this.getAuthToken();
-      const headers: Record<string, string> = {};
-
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
-      }
-
-      return data;
-    } catch (error: any) {
-      console.error(`File upload failed for ${endpoint}:`, error);
-      throw error;
-    }
-  }
 }
 
 // Create API client instance
@@ -174,14 +145,38 @@ export const api = {
       apiClient.post(`/services/${id}/reviews`, data),
   },
 
-  // Payments
+  // Enhanced Payments with Region Support
   payments: {
-    createOrder: (data: any) => 
-      apiClient.post('/payments/orders', data),
-    verifyPayment: (data: any) => 
+    createOrder: (data: {
+      amount: number;
+      purpose: string;
+      currency?: string;
+      userLocation?: any;
+    }) => 
+      apiClient.post('/payments/orders', {
+        ...data,
+        currency: data.currency || 'INR'
+      }),
+    
+    verifyPayment: (data: {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+      userLocation?: any;
+    }) => 
       apiClient.post('/payments/verify', data),
+    
     processRefund: (data: any) => 
       apiClient.post('/payments/refund', data),
+    
+    getPaymentMethods: () =>
+      apiClient.get('/payments/methods'),
+    
+    savePaymentMethod: (data: any) =>
+      apiClient.post('/payments/methods', data),
+    
+    deletePaymentMethod: (id: string) =>
+      apiClient.delete(`/payments/methods/${id}`),
   },
 
   // Transactions

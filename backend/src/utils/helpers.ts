@@ -124,6 +124,39 @@ export const generateUniqueId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
+// Generate order ID for payments
+export const generateOrderId = (): string => {
+  return `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+};
+
+// Create error with status code
+export const createError = (message: string, statusCode: number = 500): AppError => {
+  return new AppError(message, statusCode);
+};
+
+// Generate password reset token
+export const generatePasswordResetToken = (): string => {
+  return generateRandomString(64);
+};
+
+// Calculate pagination metadata
+export const calculatePagination = (page: number, limit: number, total: number) => {
+  const totalPages = Math.ceil(total / limit);
+  const hasNext = page < totalPages;
+  const hasPrev = page > 1;
+  
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    hasNext,
+    hasPrev,
+    nextPage: hasNext ? page + 1 : null,
+    prevPage: hasPrev ? page - 1 : null
+  };
+};
+
 // Truncate text
 export const truncateText = (text: string, maxLength: number = 100): string => {
   if (text.length <= maxLength) return text;
@@ -242,6 +275,10 @@ export default {
   calculatePercentage,
   sleep,
   generateUniqueId,
+  generateOrderId,
+  createError,
+  generatePasswordResetToken,
+  calculatePagination,
   truncateText,
   deepClone,
   isEmpty,
