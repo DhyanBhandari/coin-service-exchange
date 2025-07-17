@@ -9,10 +9,14 @@ import { createApiResponse } from '../utils/helpers';
 // Extend Request interface to include user data
 interface AuthenticatedRequest extends Request {
   user?: {
-    userId: number;
+    id: string; // Changed from userId to id, and string instead of number
     email: string;
     role: string;
     firebaseUid?: string;
+    walletBalance?: string;
+    name?: string;
+    isActive?: boolean;
+    emailVerified?: boolean;
   };
   firebaseUser?: any;
 }
@@ -73,7 +77,7 @@ export const authenticateToken = async (
     }
 
     const token = authHeader.substring(7);
-    const db = getDb(); // Reuse the database connection
+    const db = getDb();
 
     try {
       // Try Firebase token first
@@ -101,12 +105,18 @@ export const authenticateToken = async (
         );
       }
 
-      req.user = {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        firebaseUid: user.firebaseUid || undefined
-      };
+      // Set user info in request - using proper field names
+    req.user = {
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  firebaseUid: user.firebaseUid || undefined,
+  walletBalance: user.walletBalance || undefined,
+  name: user.name || undefined,
+  isActive: user.isActive ?? undefined,
+  emailVerified: user.emailVerified ?? undefined
+};
+
       
       req.firebaseUser = decodedFirebaseToken;
       
@@ -138,10 +148,14 @@ export const authenticateToken = async (
         }
 
         req.user = {
-          userId: user.id,
+          id: user.id,
           email: user.email,
           role: user.role,
-          firebaseUid: user.firebaseUid || undefined
+          firebaseUid: user.firebaseUid || undefined,
+          walletBalance: user.walletBalance || undefined,
+          name: user.name || undefined,
+          isActive: user.isActive ?? undefined,
+          emailVerified: user.emailVerified ?? undefined
         };
         
       } catch (jwtError) {
@@ -175,7 +189,7 @@ export const optionalAuth = async (
     }
 
     const token = authHeader.substring(7);
-    const db = getDb(); // Reuse the database connection
+    const db = getDb();
     
     try {
       // Try Firebase token first
@@ -191,11 +205,16 @@ export const optionalAuth = async (
         const user = userResult[0];
         if (user.isActive) {
           req.user = {
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-            firebaseUid: user.firebaseUid || undefined
-          };
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  firebaseUid: user.firebaseUid || undefined,
+  walletBalance: user.walletBalance || undefined,
+  name: user.name || undefined,
+  isActive: user.isActive ?? undefined,
+  emailVerified: user.emailVerified ?? undefined
+};
+
           req.firebaseUser = decodedFirebaseToken;
         }
       }
@@ -213,12 +232,17 @@ export const optionalAuth = async (
         if (userResult.length > 0) {
           const user = userResult[0];
           if (user.isActive) {
-            req.user = {
-              userId: user.id,
-              email: user.email,
-              role: user.role,
-              firebaseUid: user.firebaseUid || undefined
-            };
+           req.user = {
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  firebaseUid: user.firebaseUid || undefined,
+  walletBalance: user.walletBalance || undefined,
+  name: user.name || undefined,
+  isActive: user.isActive ?? undefined,
+  emailVerified: user.emailVerified ?? undefined
+};
+
           }
         }
       } catch (jwtError) {
@@ -265,3 +289,6 @@ export const validateApiKey = (
     );
   }
 };
+
+// Export the AuthRequest type for use in other files
+export type AuthRequest = AuthenticatedRequest;

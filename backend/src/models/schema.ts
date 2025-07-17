@@ -1,10 +1,10 @@
 import { pgTable, text, integer, timestamp, boolean, json, decimal, uuid, index, uniqueIndex, serial, varchar, jsonb, foreignKey, interval } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Users table - Updated to support Firebase authentication
+// Users table - Fixed Firebase authentication support
 export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  firebaseUid: varchar('firebase_uid', { length: 128 }).unique(), // Firebase UID
+  id: uuid('id').defaultRandom().primaryKey(), // Changed from serial to uuid
+  firebaseUid: varchar('firebase_uid', { length: 128 }).unique(), // Fixed column name
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }), // Optional for Firebase users
   name: varchar('name', { length: 100 }).notNull(),
@@ -27,10 +27,10 @@ export const users = pgTable('users', {
   isActiveIdx: index('users_is_active_idx').on(table.isActive),
 }));
 
-// Services table - Enhanced with more fields
+// Services table - Updated to use UUID for organizationId
 export const services = pgTable('services', {
   id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: integer('organization_id').notNull(),
+  organizationId: uuid('organization_id').notNull(), // Changed from integer to uuid
   title: text('title').notNull(),
   description: text('description').notNull(),
   shortDescription: text('short_description'),
@@ -82,10 +82,10 @@ export const services = pgTable('services', {
   seoDescription: text('seo_description'),
   seoKeywords: json('seo_keywords').$type<string[]>().default([]),
   adminNotes: text('admin_notes'),
-  approvedBy: integer('approved_by'),
+  approvedBy: uuid('approved_by'), // Changed from integer to uuid
   approvedAt: timestamp('approved_at'),
   rejectionReason: text('rejection_reason'),
-  lastModifiedBy: integer('last_modified_by'),
+  lastModifiedBy: uuid('last_modified_by'), // Changed from integer to uuid
   publishedAt: timestamp('published_at'),
   archivedAt: timestamp('archived_at'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -121,11 +121,11 @@ export const services = pgTable('services', {
   }),
 }));
 
-// Service bookings table
+// Service bookings table - Updated to use UUID for user references
 export const serviceBookings = pgTable('service_bookings', {
   id: uuid('id').defaultRandom().primaryKey(),
   serviceId: uuid('service_id').notNull(),
-  userId: integer('user_id').notNull(),
+  userId: uuid('user_id').notNull(), // Changed from integer to uuid
   bookingReference: varchar('booking_reference', { length: 50 }).unique(),
   quantity: integer('quantity').default(1),
   totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
@@ -146,7 +146,7 @@ export const serviceBookings = pgTable('service_bookings', {
   contactInfo: jsonb('contact_info'),
   cancellationReason: text('cancellation_reason'),
   cancelledAt: timestamp('cancelled_at'),
-  cancelledBy: integer('cancelled_by'),
+  cancelledBy: uuid('cancelled_by'), // Changed from integer to uuid
   refundAmount: decimal('refund_amount', { precision: 12, scale: 2 }),
   refundReason: text('refund_reason'),
   refundedAt: timestamp('refunded_at'),
@@ -179,10 +179,10 @@ export const serviceBookings = pgTable('service_bookings', {
   }),
 }));
 
-// Transactions table - Enhanced
+// Transactions table - Updated to use UUID for user references
 export const transactions = pgTable('transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: integer('user_id').notNull(),
+  userId: uuid('user_id').notNull(), // Changed from integer to uuid
   serviceId: uuid('service_id'),
   bookingId: uuid('booking_id'),
   type: text('type').notNull(), // 'credit', 'debit', 'coin_purchase', 'service_booking', 'conversion', 'refund', 'cashback', 'penalty'
@@ -204,7 +204,7 @@ export const transactions = pgTable('transactions', {
   fees: decimal('fees', { precision: 12, scale: 2 }).default('0.00'),
   taxes: decimal('taxes', { precision: 12, scale: 2 }).default('0.00'),
   processedAt: timestamp('processed_at'),
-  processedBy: integer('processed_by'),
+  processedBy: uuid('processed_by'), // Changed from integer to uuid
   failureReason: text('failure_reason'),
   retryCount: integer('retry_count').default(0),
   metadata: jsonb('metadata'),
