@@ -1,91 +1,247 @@
-// src/pages/user/AddCoins.tsx - Updated with real payment integration
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+// src/pages/user/AddCoins.tsx
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Coins, CreditCard, Smartphone, Wallet } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, Coins, CreditCard, AlertCircle, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserData } from "@/contexts/UserDataContext";
+import { api } from "@/lib/api";
+
+// Extend Window interface for Razorpay
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
 
 const AddCoins = () => {
-  const [amount, setAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("upi");
-  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { userData } = useAuth();
-  const { addCoins } = useUserData();
+  
+  const [amount, setAmount] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [userLocation, setUserLocation] = useState<any>(null);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  const quickAmounts = [100, 500, 1000, 2000, 5000];
+  // Predefined coin packages
+  const coinPackages = [
+    { coins: 100, price: 100, bonus: 0, popular: false },
+    { coins: 500, price: 500, bonus: 25, popular: true },
+    { coins: 1000, price: 1000, bonus: 100, popular: false },
+    { coins: 2000, price: 2000, bonus: 300, popular: false },
+  ];
 
-  const getPaymentMethodName = (method: string) => {
-    switch (method) {
-      case 'upi': return 'UPI Payment';
-      case 'card': return 'Credit/Debit Card';
-      case 'wallet': return 'Digital Wallet';
-      default: return 'UPI Payment';
+  // Load Razorpay script
+  useEffect(() => {
+    const loadRazorpayScript = () => {
+      return new Promise((resolve) => {
+        if (window.Razorpay) {
+          setRazorpayLoaded(true);
+          resolve(true);
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => {
+          setRazorpayLoaded(true);
+          resolve(true);
+        };
+        script.onerror = () => {
+          console.error('Failed to load Razorpay script');
+          resolve(false);
+        };
+        document.body.appendChild(script);
+      });
+    };
+
+    loadRazorpayScript();
+  }, []);
+
+  // Get user location for region-specific pricing
+  useEffect(() => {
+    const getUserLocation = async () => {
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        setUserLocation({
+          country: data.country_name,
+          countryCode: data.country_code,
+          isIndia: data.country_code === 'IN'
+        });
+      } catch (error) {
+        console.error('Failed to get location:', error);
+        // Default to India if location detection fails
+        setUserLocation({
+          country: 'India',
+          countryCode: 'IN',
+          isIndia: true
+        });
+      }
+    };
+
+    getUserLocation();
+  }, []);
+
+  // Handle predefined package selection
+  const handlePackageSelect = (packageInfo: any) => {
+    setAmount(packageInfo.price.toString());
+  };
+
+  // Create Razorpay order
+  const createRazorpayOrder = async (paymentAmount: number) => {
+    try {
+      const response = await api.payments.createOrder({
+        amount: paymentAmount,
+        purpose: 'coin_purchase',
+        currency: userLocation?.isIndia ? 'INR' : 'USD',
+        userLocation
+      });
+
+      if (response.success) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to create order');
+      }
+    } catch (error: any) {
+      console.error('Create order error:', error);
+      throw error;
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const numAmount = parseInt(amount);
-    if (!numAmount || numAmount < 10) {
+  // Verify payment after successful payment
+  const verifyPayment = async (paymentResponse: RazorpayResponse) => {
+    try {
+      const response = await api.payments.verifyPayment({
+        razorpay_order_id: paymentResponse.razorpay_order_id,
+        razorpay_payment_id: paymentResponse.razorpay_payment_id,
+        razorpay_signature: paymentResponse.razorpay_signature,
+        userLocation
+      });
+
+      if (response.success) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Payment verification failed');
+      }
+    } catch (error: any) {
+      console.error('Payment verification error:', error);
+      throw error;
+    }
+  };
+
+  // Handle payment process
+  const handlePayment = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
       toast({
         title: "Invalid Amount",
-        description: "Minimum amount is ₹10",
+        description: "Please enter a valid amount",
         variant: "destructive",
       });
       return;
     }
 
-    if (numAmount > 50000) {
+    if (!razorpayLoaded) {
       toast({
-        title: "Amount Too Large",
-        description: "Maximum amount is ₹50,000 per transaction",
+        title: "Payment Service Loading",
+        description: "Please wait for payment service to load",
         variant: "destructive",
       });
       return;
     }
 
-    setIsLoading(true);
+    if (!userData) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to make a payment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
 
     try {
-      // Simulate payment processing with realistic delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Create order
+      const orderData = await createRazorpayOrder(parseFloat(amount));
+      
+      // Razorpay options
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount * 100, // Convert to paise
+        currency: orderData.currency,
+        name: 'ErthaExchange',
+        description: 'Add coins to your wallet',
+        order_id: orderData.orderId,
+        prefill: {
+          name: userData.name || userData.email,
+          email: userData.email,
+          contact: userData.phone || ''
 
-      // Add coins using the UserData context
-      const success = await addCoins(numAmount, getPaymentMethodName(paymentMethod));
+        },
+        theme: {
+          color: '#3B82F6'
+        },
+        handler: async (response: RazorpayResponse) => {
+          try {
+            // Verify payment
+            await verifyPayment(response);
+            
+            toast({
+              title: "Payment Successful!",
+              description: "Coins have been added to your wallet",
+            });
 
-      if (success) {
-        toast({
-          title: "Payment Successful!",
-          description: `₹${numAmount} converted to ${numAmount} ErthaCoins. Your new balance: ${(userData?.walletBalance || 0) + numAmount} coins`,
-        });
+            // Redirect to transactions or dashboard
+            navigate('/transactions');
+          } catch (error: any) {
+            console.error('Payment verification failed:', error);
+            toast({
+              title: "Payment Verification Failed",
+              description: error.message || "Please contact support",
+              variant: "destructive",
+            });
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessing(false);
+            toast({
+              title: "Payment Cancelled",
+              description: "You cancelled the payment",
+              variant: "destructive",
+            });
+          }
+        }
+      };
 
-        // Navigate back to dashboard after successful payment
-        navigate('/dashboard/user');
-      } else {
-        throw new Error('Payment processing failed');
-      }
-    } catch (error) {
+      // Open Razorpay checkout
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+
+    } catch (error: any) {
+      console.error('Payment initiation failed:', error);
       toast({
         title: "Payment Failed",
-        description: "There was an error processing your payment. Please try again.",
+        description: error.message || "Failed to initiate payment",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
   };
-
-  const currentBalance = userData?.walletBalance || 0;
-  const newBalance = currentBalance + (parseInt(amount) || 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -93,10 +249,13 @@ const AddCoins = () => {
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16">
-            <Link to="/dashboard/user" className="flex items-center text-gray-600 hover:text-blue-600 mr-6">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center text-gray-600 hover:text-blue-600 mr-6"
+            >
               <ArrowLeft className="h-5 w-5 mr-2" />
-              Back to Dashboard
-            </Link>
+              Back
+            </button>
             <div className="flex items-center space-x-2">
               <Coins className="h-6 w-6 text-blue-600" />
               <span className="text-lg font-semibold">Add Coins</span>
@@ -105,211 +264,156 @@ const AddCoins = () => {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Add ErthaCoins</h1>
-          <p className="text-gray-600">Top up your wallet to access amazing services</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Add Coins to Your Wallet</h1>
+          <p className="text-gray-600">
+            Purchase ErthaCoins to book sustainable services
+            {userLocation && (
+              <span className="ml-2 text-sm text-blue-600">
+                (Region: {userLocation.country})
+              </span>
+            )}
+          </p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Payment Form */}
+          {/* Coin Packages */}
           <Card>
             <CardHeader>
-              <CardTitle>Choose Amount</CardTitle>
-              <CardDescription>₹1 = 1 ErthaCoins</CardDescription>
+              <CardTitle>Choose a Package</CardTitle>
+              <CardDescription>Select a predefined coin package</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Current Balance Display */}
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-blue-700 font-medium">Current Balance</span>
-                    <div className="flex items-center space-x-1">
-                      <Coins className="h-4 w-4 text-blue-600" />
-                      <span className="text-lg font-bold text-blue-600">{currentBalance}</span>
-                      <span className="text-blue-600">coins</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Amount Selection */}
-                <div className="space-y-3">
-                  <Label>Quick Select</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {quickAmounts.map((quickAmount) => (
-                      <Button
-                        key={quickAmount}
-                        type="button"
-                        variant={amount === quickAmount.toString() ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setAmount(quickAmount.toString())}
-                      >
-                        ₹{quickAmount}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Amount */}
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Custom Amount (₹)</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    placeholder="Enter amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    min="10"
-                    max="50000"
-                    required
-                  />
-                  <p className="text-sm text-gray-500">Minimum: ₹10 | Maximum: ₹50,000</p>
-                </div>
-
-                {/* New Balance Preview */}
-                {amount && parseInt(amount) >= 10 && (
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-green-700 font-medium">New Balance</span>
-                      <div className="flex items-center space-x-1">
-                        <Coins className="h-4 w-4 text-green-600" />
-                        <span className="text-lg font-bold text-green-600">{newBalance}</span>
-                        <span className="text-green-600">coins</span>
+              <div className="grid grid-cols-1 gap-4">
+                {coinPackages.map((pkg, index) => (
+                  <div
+                    key={index}
+                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                      pkg.popular ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => handlePackageSelect(pkg)}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <Coins className="h-5 w-5 text-blue-600" />
+                          <span className="font-semibold">{pkg.coins} Coins</span>
+                          {pkg.popular && <Badge variant="default">Popular</Badge>}
+                        </div>
+                        {pkg.bonus > 0 && (
+                          <p className="text-sm text-green-600 mt-1">
+                            +{pkg.bonus} bonus coins
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">
+                          {userLocation?.isIndia ? '₹' : '$'}{pkg.price}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {pkg.coins + pkg.bonus} total coins
+                        </p>
                       </div>
                     </div>
-                    <p className="text-sm text-green-600 mt-1">
-                      +{parseInt(amount)} coins will be added
-                    </p>
                   </div>
-                )}
-
-                {/* Payment Method */}
-                <div className="space-y-3">
-                  <Label>Payment Method</Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="radio"
-                        id="upi"
-                        name="payment"
-                        value="upi"
-                        checked={paymentMethod === "upi"}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="text-blue-600"
-                      />
-                      <label htmlFor="upi" className="flex items-center space-x-2 cursor-pointer">
-                        <Smartphone className="h-4 w-4 text-blue-600" />
-                        <span>UPI Payment</span>
-                        <Badge variant="secondary">Recommended</Badge>
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="radio"
-                        id="card"
-                        name="payment"
-                        value="card"
-                        checked={paymentMethod === "card"}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="text-blue-600"
-                      />
-                      <label htmlFor="card" className="flex items-center space-x-2 cursor-pointer">
-                        <CreditCard className="h-4 w-4 text-green-600" />
-                        <span>Credit/Debit Card</span>
-                      </label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="radio"
-                        id="wallet"
-                        name="payment"
-                        value="wallet"
-                        checked={paymentMethod === "wallet"}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="text-blue-600"
-                      />
-                      <label htmlFor="wallet" className="flex items-center space-x-2 cursor-pointer">
-                        <Wallet className="h-4 w-4 text-purple-600" />
-                        <span>Digital Wallet</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={isLoading || !amount || parseInt(amount) < 10}
-                >
-                  {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                      <span>Processing Payment...</span>
-                    </div>
-                  ) : (
-                    `Pay ₹${amount || "0"}`
-                  )}
-                </Button>
-              </form>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
-          {/* Payment Summary */}
+          {/* Custom Amount */}
           <Card>
             <CardHeader>
-              <CardTitle>Payment Summary</CardTitle>
+              <CardTitle>Custom Amount</CardTitle>
+              <CardDescription>Enter your desired amount</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Amount</span>
-                  <span className="font-medium">₹{amount || "0"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">ErthaCoins</span>
-                  <span className="font-medium">{amount || "0"} coins</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Processing Fee</span>
-                  <span className="font-medium text-green-600">₹0</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Payment Method</span>
-                  <span className="font-medium text-sm">{getPaymentMethodName(paymentMethod)}</span>
-                </div>
-                <div className="border-t pt-3">
-                  <div className="flex justify-between">
-                    <span className="font-semibold">Total</span>
-                    <span className="font-semibold">₹{amount || "0"}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-blue-900 mb-2">Benefits</h4>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Instant coin conversion</li>
-                  <li>• No processing fees</li>
-                  <li>• Secure payment gateway</li>
-                  <li>• 24/7 customer support</li>
-                </ul>
-              </div>
-
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h4 className="font-semibold text-green-900 mb-2">Security</h4>
-                <p className="text-sm text-green-800">
-                  Your payment is secured with bank-grade encryption and processed through trusted payment partners.
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="amount">
+                  Amount ({userLocation?.isIndia ? 'INR' : 'USD'})
+                </Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  min="10"
+                  max={userLocation?.isIndia ? "500000" : "10000"}
+                />
+                <p className="text-sm text-gray-500">
+                  Minimum: {userLocation?.isIndia ? '₹10' : '$10'} | 
+                  Maximum: {userLocation?.isIndia ? '₹500,000' : '$10,000'}
                 </p>
               </div>
 
-              {/* Transaction History Link */}
-              <div className="pt-4 border-t">
-                <Link to="/transactions">
-                  <Button variant="outline" className="w-full">
-                    View Transaction History
-                  </Button>
-                </Link>
+              {amount && parseFloat(amount) > 0 && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CreditCard className="h-5 w-5 text-blue-600" />
+                    <span className="font-medium text-blue-900">Payment Summary</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm">
+                      Amount: {userLocation?.isIndia ? '₹' : '$'}{amount}
+                    </p>
+                    <p className="text-sm">
+                      Coins: {amount} coins
+                    </p>
+                    <p className="text-sm text-blue-600">
+                      You'll receive {amount} ErthaCoins
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!razorpayLoaded && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Loading payment service...
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                onClick={handlePayment}
+                className="w-full"
+                disabled={isProcessing || !amount || parseFloat(amount) <= 0 || !razorpayLoaded}
+              >
+                {isProcessing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                    Processing Payment...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Pay {amount ? `${userLocation?.isIndia ? '₹' : '$'}${amount}` : 'Amount'}
+                  </>
+                )}
+              </Button>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm text-gray-600">Secure payment via Razorpay</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm text-gray-600">Instant coin delivery</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <span className="text-sm text-gray-600">24/7 support</span>
+                </div>
               </div>
+
+              <p className="text-xs text-gray-500 text-center">
+                By clicking Pay, you agree to our terms and conditions. 
+                All payments are processed securely through Razorpay.
+              </p>
             </CardContent>
           </Card>
         </div>

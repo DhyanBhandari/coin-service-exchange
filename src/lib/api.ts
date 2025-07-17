@@ -1,3 +1,4 @@
+// src/lib/api.ts - Updated with enhanced payment support
 import { FirebaseAuthService } from './firebase';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
@@ -8,6 +9,33 @@ interface ApiResponse<T = any> {
   data?: T;
   message?: string;
   error?: string;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// Payment specific interfaces
+interface PaymentOrderData {
+  orderId: string;
+  amount: number;
+  currency: string;
+  receipt: string;
+  paymentTransactionId: string;
+  keyId: string;
+}
+
+interface PaymentVerificationData {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  userLocation?: {
+    country?: string;
+    countryCode?: string;
+    isIndia?: boolean;
+  };
 }
 
 // HTTP Client Class
@@ -20,7 +48,12 @@ class ApiClient {
 
   // Get authentication token
   private async getAuthToken(): Promise<string | null> {
-    return await FirebaseAuthService.getToken();
+    try {
+      return await FirebaseAuthService.getToken();
+    } catch (error) {
+      console.error('Failed to get auth token:', error);
+      return null;
+    }
   }
 
   // Build headers with authentication
@@ -38,7 +71,7 @@ class ApiClient {
     return headers;
   }
 
-  // Generic request method
+  // Generic request method with enhanced error handling
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -52,15 +85,46 @@ class ApiClient {
         headers,
       });
 
-      const data = await response.json();
+      // Handle different response types
+      let data: any;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = { message: await response.text() };
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+        const errorMessage = data.message || data.error || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
       }
 
       return data;
     } catch (error: any) {
       console.error(`API request failed for ${endpoint}:`, error);
+      
+      // Enhanced error handling for different scenarios
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        throw new Error('Network error. Please check your internet connection.');
+      }
+      
+      if (error.message.includes('401')) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      
+      if (error.message.includes('403')) {
+        throw new Error('You do not have permission to perform this action.');
+      }
+      
+      if (error.message.includes('404')) {
+        throw new Error('Resource not found.');
+      }
+      
+      if (error.message.includes('500')) {
+        throw new Error('Server error. Please try again later.');
+      }
+      
       throw error;
     }
   }
@@ -145,26 +209,50 @@ export const api = {
       apiClient.post(`/services/${id}/reviews`, data),
   },
 
-  // Enhanced Payments with Region Support
+  // Enhanced Payments with better error handling and location support
   payments: {
-    createOrder: (data: {
+    createOrder: async (data: {
       amount: number;
       purpose: string;
       currency?: string;
-      userLocation?: any;
-    }) => 
-      apiClient.post('/payments/orders', {
-        ...data,
-        currency: data.currency || 'INR'
-      }),
+      userLocation?: {
+        country?: string;
+        countryCode?: string;
+        isIndia?: boolean;
+      };
+    }): Promise<ApiResponse<PaymentOrderData>> => {
+      try {
+        // Validate input
+        if (!data.amount || data.amount <= 0) {
+          throw new Error('Invalid amount. Amount must be greater than 0.');
+        }
+
+        const payload = {
+          ...data,
+          currency: data.currency || 'INR',
+          userLocation: data.userLocation || { isIndia: true, countryCode: 'IN' }
+        };
+
+        return await apiClient.post('/payments/orders', payload);
+      } catch (error: any) {
+        console.error('Create payment order error:', error);
+        throw error;
+      }
+    },
     
-    verifyPayment: (data: {
-      razorpay_order_id: string;
-      razorpay_payment_id: string;
-      razorpay_signature: string;
-      userLocation?: any;
-    }) => 
-      apiClient.post('/payments/verify', data),
+    verifyPayment: async (data: PaymentVerificationData): Promise<ApiResponse<any>> => {
+      try {
+        // Validate required fields
+        if (!data.razorpay_order_id || !data.razorpay_payment_id || !data.razorpay_signature) {
+          throw new Error('Missing required payment verification data');
+        }
+
+        return await apiClient.post('/payments/verify', data);
+      } catch (error: any) {
+        console.error('Payment verification error:', error);
+        throw error;
+      }
+    },
     
     processRefund: (data: any) => 
       apiClient.post('/payments/refund', data),
@@ -177,6 +265,9 @@ export const api = {
     
     deletePaymentMethod: (id: string) =>
       apiClient.delete(`/payments/methods/${id}`),
+    
+    getPaymentHistory: (params?: URLSearchParams) =>
+      apiClient.get(`/payments/history${params ? `?${params.toString()}` : ''}`),
   },
 
   // Transactions
@@ -225,6 +316,12 @@ export const api = {
     // Service management
     approveService: (id: string, data?: any) => 
       apiClient.post(`/admin/services/${id}/approve`, data),
+  },
+
+  // Health check
+  health: {
+    check: () => apiClient.get('/health'),
+    ping: () => fetch(`${API_BASE_URL.replace('/api/v1', '')}/health`).then(res => res.json()),
   },
 };
 
@@ -275,8 +372,41 @@ export const apiUtils = {
       return null;
     }
   },
+
+  // Format currency based on region
+  formatCurrency: (amount: number, region: 'IN' | 'US' = 'IN'): string => {
+    const formatter = new Intl.NumberFormat(region === 'IN' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency: region === 'IN' ? 'INR' : 'USD',
+    });
+    return formatter.format(amount);
+  },
+
+  // Get user location
+  getUserLocation: async (): Promise<{
+    country: string;
+    countryCode: string;
+    isIndia: boolean;
+  }> => {
+    try {
+      const response = await fetch('https://ipapi.co/json/');
+      const data = await response.json();
+      return {
+        country: data.country_name || 'India',
+        countryCode: data.country_code || 'IN',
+        isIndia: data.country_code === 'IN'
+      };
+    } catch (error) {
+      console.error('Failed to get user location:', error);
+      return {
+        country: 'India',
+        countryCode: 'IN',
+        isIndia: true
+      };
+    }
+  },
 };
 
 // Export types for use in components
-export type { ApiResponse };
+export type { ApiResponse, PaymentOrderData, PaymentVerificationData };
 export default api;
