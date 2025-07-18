@@ -292,7 +292,7 @@ export const conversionRequests = pgTable('conversion_requests', {
 // Payment methods table
 export const paymentMethods = pgTable('payment_methods', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: integer('user_id').notNull(),
+  userId: uuid('user_id').notNull(),
   type: text('type').notNull(), // 'card', 'upi', 'wallet', 'netbanking', 'emi'
   provider: text('provider').notNull(), // 'razorpay', 'gpay', 'paytm', 'phonepe', etc.
   isDefault: boolean('is_default').default(false),
@@ -323,7 +323,7 @@ export const paymentMethods = pgTable('payment_methods', {
 // Payment transactions table
 export const paymentTransactions = pgTable('payment_transactions', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: integer('user_id').notNull(),
+  userId: uuid('user_id').notNull(),
   transactionId: uuid('transaction_id'),
   paymentMethodId: uuid('payment_method_id'),
   bookingId: uuid('booking_id'),
