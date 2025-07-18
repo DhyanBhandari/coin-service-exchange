@@ -1,11 +1,15 @@
+// backend/src/services/user.service.ts
+
 import { getDb } from '../config/database';
-import { users } from '../models/schema';
-import { eq } from 'drizzle-orm';
-import { User } from '../models/schema';
+import { users, User } from '../models/schema';
+import { eq, sql } from 'drizzle-orm';
 import { sanitizeUser, createError } from '../utils/helpers';
-import { USER_STATUS } from '../utils/constants';
 import { AuditService } from './audit.service';
 import { logger } from '../utils/logger';
+import { PgTransaction } from 'drizzle-orm/pg-core';
+import * as schema from '../models/schema';
+
+type Tx = PgTransaction<any, typeof schema, any>;
 
 export class UserService {
   private auditService: AuditService;
@@ -22,27 +26,15 @@ export class UserService {
   ): Promise<User> {
     try {
       const db = getDb();
-
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
+      const [existingUser] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (!existingUser) {
         throw createError('User not found', 404);
       }
-
       const [updatedUser] = await db
         .update(users)
-        .set({
-          ...updateData,
-          updatedAt: new Date()
-        })
+        .set({ ...updateData, updatedAt: new Date() })
         .where(eq(users.id, userId))
         .returning();
-
-      // Log audit
       await this.auditService.log({
         userId,
         action: 'update',
@@ -50,80 +42,64 @@ export class UserService {
         resourceId: userId,
         oldValues: sanitizeUser(existingUser),
         newValues: sanitizeUser(updatedUser),
-        ...(ipAddress ? { ipAddress } : {}),
-        ...(userAgent ? { userAgent } : {})
+        ...(ipAddress && { ipAddress }),
+        ...(userAgent && { userAgent })
       });
-
       logger.info(`User profile updated: ${userId}`);
       return sanitizeUser(updatedUser) as User;
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Update profile error:', error);
-      throw error;
+      throw createError(error.message || 'Failed to update profile', 500);
     }
   }
-
+  
   async updateWalletBalance(
-    userId: string,
-    amount: string,
-    operation: 'add' | 'subtract' = 'add'
-  ): Promise<User> {
+    userId: string, 
+    amount: number, 
+    direction: 'add' | 'subtract',
+    tx?: Tx
+  ): Promise<{ balanceBefore: number; balanceAfter: number }> {
+    const db = tx || getDb();
+    const operator = direction === 'add' ? sql`+` : sql`-`;
+
+    if (amount < 0) {
+      throw new Error('Update amount cannot be negative.');
+    }
+
     try {
-      const db = getDb();
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (!user) {
-        throw createError('User not found', 404);
-      }
-
-      const currentBalance = parseFloat(user.walletBalance);
-      const changeAmount = parseFloat(amount);
-
-      let newBalance: number;
-      if (operation === 'add') {
-        newBalance = currentBalance + changeAmount;
-      } else {
-        newBalance = currentBalance - changeAmount;
-        if (newBalance < 0) {
-          throw createError('Insufficient wallet balance', 400);
-        }
-      }
-
-      const [updatedUser] = await db
+        const [updatedUser] = await db
         .update(users)
-        .set({
-          walletBalance: newBalance.toString(),
-          updatedAt: new Date()
-        })
+        .set({ walletBalance: sql`${users.walletBalance} ${operator} ${amount}` })
         .where(eq(users.id, userId))
-        .returning();
+        .returning({ walletBalance: users.walletBalance });
+      
+      if (!updatedUser || updatedUser.walletBalance === null) {
+        throw new Error('User not found or wallet balance is null.');
+      }
 
-      logger.info(`Wallet balance updated for user ${userId}: ${currentBalance} -> ${newBalance}`);
-      return sanitizeUser(updatedUser) as User;
-    } catch (error) {
-      logger.error('Update wallet balance error:', error);
-      throw error;
+      const balanceAfter = parseFloat(updatedUser.walletBalance);
+      const balanceBefore = direction === 'add' ? balanceAfter - amount : balanceAfter + amount;
+      
+      logger.info(`Wallet balance updated for user ${userId}: ${balanceBefore} -> ${balanceAfter}`);
+      return { balanceBefore, balanceAfter };
+
+    } catch(error: any) {
+        logger.error({
+            message: `Failed to update wallet balance for user ${userId}.`,
+            error: error.message
+        });
+        throw error;
     }
   }
 
-  async getUserById(id: string): Promise<User | null> {
+  async getUserById(id: string, tx?: Tx): Promise<User | null> {
+    const db = tx || getDb();
     try {
-      const db = getDb();
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, id))
-        .limit(1);
-
+      const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
       return user ? sanitizeUser(user) as User : null;
-    } catch (error) {
-      logger.error('Get user by ID error:', error);
-      throw error;
+    } catch (error: any) {
+      logger.error('Get user by ID error:', error.message);
+      throw createError(error.message || 'Failed to get user', 500);
     }
   }
 
@@ -136,44 +112,36 @@ export class UserService {
   ): Promise<User> {
     try {
       const db = getDb();
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (!user) {
         throw createError('User not found', 404);
       }
 
       const [updatedUser] = await db
         .update(users)
-        .set({
-          status: USER_STATUS.SUSPENDED,
-          updatedAt: new Date()
+        .set({ 
+            isActive: false, // ✅ CORRECTED: Use isActive instead of status
+            updatedAt: new Date() 
         })
         .where(eq(users.id, userId))
         .returning();
 
-      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'suspend',
         resource: 'user',
         resourceId: userId,
-        oldValues: { status: user.status },
-        newValues: { status: USER_STATUS.SUSPENDED },
+        oldValues: { isActive: user.isActive },
+        newValues: { isActive: false },
         metadata: { reason },
-        ...(ipAddress ? { ipAddress } : {}),
-        ...(userAgent ? { userAgent } : {})
+        ...(ipAddress && { ipAddress }),
+        ...(userAgent && { userAgent })
       });
-
       logger.info(`User suspended: ${userId} by admin: ${adminId}`);
       return sanitizeUser(updatedUser) as User;
-    } catch (error) {
-      logger.error('Suspend user error:', error);
-      throw error;
+    } catch (error: any) {
+      logger.error('Suspend user error:', error.message);
+      throw createError(error.message || 'Failed to suspend user', 500);
     }
   }
 
@@ -185,43 +153,35 @@ export class UserService {
   ): Promise<User> {
     try {
       const db = getDb();
-
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (!user) {
         throw createError('User not found', 404);
       }
 
       const [updatedUser] = await db
         .update(users)
-        .set({
-          status: USER_STATUS.ACTIVE,
-          updatedAt: new Date()
+        .set({ 
+            isActive: true, // ✅ CORRECTED: Use isActive instead of status
+            updatedAt: new Date() 
         })
         .where(eq(users.id, userId))
         .returning();
 
-      // Log audit
       await this.auditService.log({
         userId: adminId,
         action: 'activate',
         resource: 'user',
         resourceId: userId,
-        oldValues: { status: user.status },
-        newValues: { status: USER_STATUS.ACTIVE },
-        ...(ipAddress ? { ipAddress } : {}),
-        ...(userAgent ? { userAgent } : {})
+        oldValues: { isActive: user.isActive },
+        newValues: { isActive: true },
+        ...(ipAddress && { ipAddress }),
+        ...(userAgent && { userAgent })
       });
-
       logger.info(`User reactivated: ${userId} by admin: ${adminId}`);
       return sanitizeUser(updatedUser) as User;
-    } catch (error) {
-      logger.error('Reactivate user error:', error);
-      throw error;
+    } catch (error: any) {
+      logger.error('Reactivate user error:', error.message);
+      throw createError(error.message || 'Failed to reactivate user', 500);
     }
   }
 }

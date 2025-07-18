@@ -42,6 +42,7 @@ const getApiUrl = () => {
 
 // Firebase Auth Service
 export class FirebaseAuthService {
+  static auth: any;
   
   // Sign up new user with email/password
   static async signUp(email: string, password: string, displayName: string, role: 'user' | 'org' = 'user') {

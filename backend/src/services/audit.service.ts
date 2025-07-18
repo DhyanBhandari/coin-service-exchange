@@ -1,12 +1,17 @@
-// Fixed audit.service.ts
+// backend/src/services/audit.service.ts
+
 import { getDb } from '../config/database';
-import { auditLogs } from '../models/schema';
-import { NewAuditLog, AuditLog } from '../models/schema';
-import { eq, desc, and, gte, lte } from 'drizzle-orm';
+import { auditLogs, NewAuditLog, AuditLog } from '../models/schema';
+import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { logger } from '../utils/logger';
+import { PgTransaction } from 'drizzle-orm/pg-core';
+import * as schema from '../models/schema';
+
+// A type alias for the Drizzle transaction object for cleaner code.
+type Tx = PgTransaction<any, typeof schema, any>;
 
 export interface AuditLogData {
-  userId?: string | null; // Changed from number to string for UUID
+  userId?: string | null;
   action: string;
   resource: string;
   resourceId?: string;
@@ -17,47 +22,26 @@ export interface AuditLogData {
   metadata?: any;
 }
 
-export interface AuditLogResponse {
-  id: string;
-  userId: string | null;
-  sessionId: string | null;
-  action: string;
-  resource: string;
-  resourceId: string | null;
-  method: string | null;
-  endpoint: string | null;
-  statusCode: number | null;
-  duration: number | null;
-  oldValues: Record<string, any> | null;
-  newValues: Record<string, any> | null;
-  changes: Record<string, any> | null;
-  ipAddress: string | null;
-  userAgent: string | null;
-  location: Record<string, any> | null;
-  deviceInfo: Record<string, any> | null;
-  severity: string | null;
-  category: string | null;
-  tags: string[] | null;
-  metadata: Record<string, any> | null;
-  createdAt: Date | null;
-}
-
 export class AuditService {
-  async log(data: AuditLogData): Promise<AuditLogResponse> {
-    try {
-      const db = getDb();
-      const auditData: NewAuditLog = {
-  userId: data.userId ? parseInt(data.userId, 10) : null,
-  action: data.action,
-  resource: data.resource,
-  resourceId: data.resourceId || null,
-  oldValues: data.oldValues,
-  newValues: data.newValues,
-  ipAddress: data.ipAddress || null,
-  userAgent: data.userAgent || null,
-  metadata: data.metadata || null
-};
 
+  /**
+   * Logs an audit event. It can now operate within a parent database transaction.
+   */
+  async log(data: AuditLogData, tx?: Tx): Promise<AuditLog> {
+    const db = tx || getDb(); 
+
+    try {
+      const auditData: NewAuditLog = {
+        userId: data.userId || null, // CORRECTED: No longer uses parseInt
+        action: data.action,
+        resource: data.resource,
+        resourceId: data.resourceId,
+        oldValues: data.oldValues,
+        newValues: data.newValues,
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+        metadata: data.metadata,
+      };
 
       const [newAuditLog] = await db
         .insert(auditLogs)
@@ -68,10 +52,16 @@ export class AuditService {
         throw new Error('Failed to create audit log');
       }
 
-      return newAuditLog as AuditLogResponse;
-    } catch (error) {
-      logger.error('Audit log error:', error);
-      throw error;
+      return newAuditLog;
+    } catch (error: any) {
+      logger.error({
+        message: 'Failed to write to audit log.',
+        logData: data,
+        error: error.message,
+      });
+      // A failure to log should not crash a critical operation.
+      // We log the error but don't re-throw.
+      return {} as AuditLog;
     }
   }
 
@@ -87,51 +77,30 @@ export class AuditService {
   ) {
     try {
       const db = getDb();
-      // Apply filters
       const conditions = [];
-
       if (filters.userId) {
-      conditions.push(eq(auditLogs.userId, parseInt(filters.userId, 10)));
-    }
-
+        conditions.push(eq(auditLogs.userId, filters.userId)); // CORRECTED: No longer uses parseInt
+      }
       if (filters.action) {
         conditions.push(eq(auditLogs.action, filters.action));
       }
-
       if (filters.resource) {
         conditions.push(eq(auditLogs.resource, filters.resource));
       }
-
       if (filters.startDate) {
         conditions.push(gte(auditLogs.createdAt, new Date(filters.startDate)));
       }
-
       if (filters.endDate) {
         conditions.push(lte(auditLogs.createdAt, new Date(filters.endDate)));
       }
-
-      // Get total count
-      const totalQuery = conditions.length > 0
-        ? db.select().from(auditLogs).where(and(...conditions))
-        : db.select().from(auditLogs);
-
-      const total = (await totalQuery).length;
-
-      // Apply pagination
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const totalQuery = await db.select({ count: sql<number>`count(*)` }).from(auditLogs).where(whereClause);
+      const total = totalQuery[0].count;
       const offset = (pagination.page - 1) * pagination.limit;
-      const dataQuery = conditions.length > 0
-        ? db.select().from(auditLogs).where(and(...conditions))
-        : db.select().from(auditLogs);
-
-      const data = await dataQuery
-        .orderBy(desc(auditLogs.createdAt))
-        .limit(pagination.limit)
-        .offset(offset);
-
+      const data = await db.select().from(auditLogs).where(whereClause).orderBy(desc(auditLogs.createdAt)).limit(pagination.limit).offset(offset);
       const totalPages = Math.ceil(total / pagination.limit);
-      
       return {
-        data: data as AuditLogResponse[],
+        data,
         pagination: {
           page: pagination.page,
           limit: pagination.limit,
@@ -147,16 +116,11 @@ export class AuditService {
     }
   }
 
-  async getAuditLogById(id: string): Promise<AuditLogResponse | null> {
+  async getAuditLogById(id: string): Promise<AuditLog | null> {
     try {
       const db = getDb();
-      const [auditLog] = await db
-        .select()
-        .from(auditLogs)
-        .where(eq(auditLogs.id, id))
-        .limit(1);
-
-      return (auditLog as AuditLogResponse) || null;
+      const [auditLog] = await db.select().from(auditLogs).where(eq(auditLogs.id, id)).limit(1);
+      return auditLog || null;
     } catch (error) {
       logger.error('Get audit log by ID error:', error);
       throw error;
@@ -164,20 +128,18 @@ export class AuditService {
   }
 
   async getActivitySummary(userId: string, days: number = 30): Promise<any> {
-  try {
-    const db = getDb();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    const logs = await db
-      .select()
-      .from(auditLogs)
-      .where(and(
-        eq(auditLogs.userId, parseInt(userId, 10)),
-        gte(auditLogs.createdAt, startDate)
-      ))
-      .orderBy(desc(auditLogs.createdAt));
-
+    try {
+      const db = getDb();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      const logs = await db
+        .select()
+        .from(auditLogs)
+        .where(and(
+          eq(auditLogs.userId, userId), // CORRECTED: No longer uses parseInt
+          gte(auditLogs.createdAt, startDate)
+        ))
+        .orderBy(desc(auditLogs.createdAt));
       const summary = {
         totalActions: logs.length,
         actionBreakdown: logs.reduce((acc, log) => {
@@ -190,7 +152,6 @@ export class AuditService {
         }, {} as Record<string, number>),
         recentActivity: logs.slice(0, 10)
       };
-
       return summary;
     } catch (error) {
       logger.error('Get activity summary error:', error);
@@ -199,16 +160,15 @@ export class AuditService {
   }
 }
 
-// Create a singleton instance for convenience
+// ✅ RESTORED: This section is added back to fix the export error.
 const auditService = new AuditService();
 
-// Export a convenience function that matches the expected interface
 export const logActivity = async (
   userId: string,
   action: string,
   resource: string,
   metadata?: any
-): Promise<AuditLogResponse> => {
+): Promise<AuditLog> => {
   return auditService.log({
     userId,
     action,
