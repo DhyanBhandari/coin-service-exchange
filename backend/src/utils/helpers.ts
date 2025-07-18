@@ -41,7 +41,7 @@ export const verifyToken = (token: string): any => {
 // User data sanitization
 
 export const sanitizeUser = (user: any) => {
-  const { passwordHash, ...sanitizedUser } = user;
+  const { password, ...sanitizedUser } = user;
   return sanitizedUser;
 };
 
@@ -257,6 +257,17 @@ export const asyncHandler = (fn: Function) => {
   };
 };
 
+// Client IP helper
+export const getClientIp = (req: any): string => {
+  return req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 
+         (req.connection.socket ? req.connection.socket.remoteAddress : null) || 'unknown';
+};
+
+// User agent helper
+export const getUserAgent = (req: any): string => {
+  return req.get('User-Agent') || 'unknown';
+};
+
 // Default export for common utilities
 export default {
   isDevelopment,
@@ -290,6 +301,8 @@ export default {
   isValidFileType,
   formatBytes,
   createRateLimitKey,
+  getClientIp,
+  getUserAgent,
   AppError,
   asyncHandler
 };

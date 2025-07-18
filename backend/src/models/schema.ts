@@ -540,7 +540,7 @@ export const apiKeys = pgTable('api_keys', {
 // Password reset tokens table
 export const passwordResetTokens = pgTable('password_reset_tokens', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: integer('user_id').notNull(),
+ userId: uuid('user_id').notNull(),
   token: text('token').notNull().unique(),
   tokenHash: text('token_hash').notNull(), // Hashed version for security
   expiresAt: timestamp('expires_at').notNull(),

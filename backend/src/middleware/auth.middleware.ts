@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { auth as adminAuth } from '../config/firebase-admin';
-import { users } from '../models/schema';
+import { users }  from '../models/schema';
 import { getDb } from '../config/database';
 import { eq } from 'drizzle-orm';
 import { createApiResponse } from '../utils/helpers';
@@ -29,7 +29,7 @@ export const validateFirebaseToken = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json(
         createApiResponse(false, 'No token provided')
@@ -40,21 +40,21 @@ export const validateFirebaseToken = async (
 
     // Verify Firebase ID token
     const decodedToken = await adminAuth.verifyIdToken(token);
-    
+
     // Attach Firebase user info to request
     req.firebaseUser = decodedToken;
-    
+
     next();
   } catch (error: any) {
     console.error('Firebase token validation error:', error);
-    
+
     let message = 'Invalid token';
     if (error.code === 'auth/id-token-expired') {
       message = 'Token expired';
     } else if (error.code === 'auth/id-token-revoked') {
       message = 'Token revoked';
     }
-    
+
     return res.status(401).json(
       createApiResponse(false, message)
     );
@@ -69,7 +69,7 @@ export const authenticateToken = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json(
         createApiResponse(false, 'No token provided')
@@ -82,7 +82,7 @@ export const authenticateToken = async (
     try {
       // Try Firebase token first
       const decodedFirebaseToken = await adminAuth.verifyIdToken(token);
-      
+
       // Find user by Firebase UID
       const userResult = await db
         .select()
@@ -97,7 +97,7 @@ export const authenticateToken = async (
       }
 
       const user = userResult[0];
-      
+
       // Check if user is active
       if (!user.isActive) {
         return res.status(403).json(
@@ -117,14 +117,14 @@ export const authenticateToken = async (
   emailVerified: user.emailVerified ?? undefined
 };
 
-      
+
       req.firebaseUser = decodedFirebaseToken;
-      
+
     } catch (firebaseError) {
       // If Firebase token validation fails, try JWT
       try {
         const decodedJWT = jwt.verify(token, process.env.JWT_SECRET!) as any;
-        
+
         // Find user by ID from JWT
         const userResult = await db
           .select()
@@ -139,7 +139,7 @@ export const authenticateToken = async (
         }
 
         const user = userResult[0];
-        
+
         // Check if user is active
         if (!user.isActive) {
           return res.status(403).json(
@@ -157,7 +157,7 @@ export const authenticateToken = async (
           isActive: user.isActive ?? undefined,
           emailVerified: user.emailVerified ?? undefined
         };
-        
+
       } catch (jwtError) {
         console.error('JWT validation error:', jwtError);
         return res.status(401).json(
@@ -165,7 +165,7 @@ export const authenticateToken = async (
         );
       }
     }
-    
+
     next();
   } catch (error: any) {
     console.error('Authentication error:', error);
@@ -183,18 +183,18 @@ export const optionalAuth = async (
 ) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return next();
     }
 
     const token = authHeader.substring(7);
     const db = getDb();
-    
+
     try {
       // Try Firebase token first
       const decodedFirebaseToken = await adminAuth.verifyIdToken(token);
-      
+
       const userResult = await db
         .select()
         .from(users)
@@ -222,7 +222,7 @@ export const optionalAuth = async (
       // Try JWT fallback
       try {
         const decodedJWT = jwt.verify(token, process.env.JWT_SECRET!) as any;
-        
+
         const userResult = await db
           .select()
           .from(users)
@@ -249,7 +249,7 @@ export const optionalAuth = async (
         // Ignore JWT errors in optional auth
       }
     }
-    
+
     next();
   } catch (error: any) {
     // Ignore errors in optional auth
@@ -265,7 +265,7 @@ export const validateApiKey = (
 ) => {
   try {
     const apiKey = req.headers['x-api-key'] as string;
-    
+
     if (!apiKey) {
       return res.status(401).json(
         createApiResponse(false, 'API key required')
@@ -274,13 +274,13 @@ export const validateApiKey = (
 
     // Check against environment variable
     const validApiKey = process.env.API_KEY;
-    
+
     if (apiKey !== validApiKey) {
       return res.status(401).json(
         createApiResponse(false, 'Invalid API key')
       );
     }
-    
+
     next();
   } catch (error: any) {
     console.error('API key validation error:', error);

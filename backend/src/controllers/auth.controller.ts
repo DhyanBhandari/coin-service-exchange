@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { hash, compare } from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { users } from '../models/schema';
+import { users, passwordResetTokens } from '../models/schema';
 import { getDb } from '../config/database';
-import { eq } from 'drizzle-orm';
+import { eq, and, gt } from 'drizzle-orm';
 import { createApiResponse, sanitizeUser } from '../utils/helpers';
 import { logActivity } from '../services/audit.service';
 import { AuthRequest } from '../middleware/auth.middleware';
+import crypto from 'crypto';
 
 // Firebase Register - Create user from Firebase auth
 export const firebaseRegister = async (req: AuthRequest, res: Response) => {
@@ -223,7 +224,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { name, phone, avatar } = req.body;
+    const { name, phone, profileImage } = req.body;
 
     if (!userId) {
       return res.status(401).json(
@@ -262,7 +263,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
     if (name !== undefined) updateData.name = name;
     if (phone !== undefined) updateData.phone = phone;
-    if (avatar !== undefined) updateData.avatar = avatar;
+    if (profileImage !== undefined) updateData.profileImage = profileImage;
 
     // Update user profile
     await db
@@ -336,7 +337,7 @@ export const register = async (req: Request, res: Response) => {
       .insert(users)
       .values({
         email,
-        password: hashedPassword,
+        passwordHash: hashedPassword, 
         name,
         role: role as 'user' | 'org' | 'admin',
         emailVerified: false,
@@ -415,14 +416,14 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Check if user has a password (Firebase users might not have one)
-    if (!user.password) {
+    if (!user.passwordHash) {
       return res.status(401).json(
         createApiResponse(false, null, 'Invalid credentials')
       );
     }
 
     // Verify password
-    const isPasswordValid = await compare(password, user.password);
+    const isPasswordValid = await compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
       return res.status(401).json(
@@ -520,14 +521,14 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     }
 
     // Check if user has a password (Firebase users might not have one)
-    if (!user.password) {
+    if (!user.passwordHash) {
       return res.status(400).json(
         createApiResponse(false, null, 'Password change not available for this account')
       );
     }
 
     // Verify current password
-    const isCurrentPasswordValid = await compare(currentPassword, user.password);
+    const isCurrentPasswordValid = await compare(currentPassword, user.passwordHash);
 
     if (!isCurrentPasswordValid) {
       return res.status(401).json(
@@ -542,7 +543,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     await db
       .update(users)
       .set({
-        password: hashedNewPassword,
+        passwordHash: hashedNewPassword,
         updatedAt: new Date()
       })
       .where(eq(users.id, userId));
@@ -564,6 +565,162 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     console.error('Change password error:', error);
     res.status(500).json(
       createApiResponse(false, null, 'Failed to change password')
+    );
+  }
+};
+
+// Forgot password function
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json(
+        createApiResponse(false, null, 'Email is required')
+      );
+    }
+
+    const db = getDb();
+
+    // Check if user exists
+    const userResult = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    // Always return success message for security
+    const successMessage = 'If an account with that email exists, a password reset link has been sent.';
+
+    if (userResult.length === 0) {
+      return res.json(
+        createApiResponse(true, null, successMessage)
+      );
+    }
+
+    const user = userResult[0];
+
+    // Don't send reset email for Firebase users
+    if (user.firebaseUid) {
+      return res.json(
+        createApiResponse(true, null, successMessage)
+      );
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+   // Store reset token
+await db
+  .insert(passwordResetTokens)
+  .values({
+    userId: user.id,
+    token: resetToken,
+    tokenHash: crypto.createHash('sha256').update(resetToken).digest('hex'), // Add this line to create a hash of the token
+    expiresAt,
+    isUsed: false
+  });
+
+    // TODO: Send email with reset token
+    // For now, just log it (in production, you'd send an email)
+    console.log(`Password reset token for ${email}: ${resetToken}`);
+
+    res.json(
+      createApiResponse(true, null, successMessage)
+    );
+  } catch (error: any) {
+    console.error('Forgot password error:', error);
+    res.status(500).json(
+      createApiResponse(false, null, 'Failed to process password reset request')
+    );
+  }
+};
+
+// Reset password function
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json(
+        createApiResponse(false, null, 'Token and new password are required')
+      );
+    }
+
+    const db = getDb();
+
+    // Find valid reset token
+    const tokenResult = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(and(
+        eq(passwordResetTokens.token, token),
+        eq(passwordResetTokens.isUsed, false),
+        gt(passwordResetTokens.expiresAt, new Date())
+      ))
+      .limit(1);
+
+    if (tokenResult.length === 0) {
+      return res.status(400).json(
+        createApiResponse(false, null, 'Invalid or expired reset token')
+      );
+    }
+
+    const resetTokenRecord = tokenResult[0];
+
+    // Get user
+    const userResult = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, resetTokenRecord.userId))
+      .limit(1);
+
+    if (userResult.length === 0) {
+      return res.status(404).json(
+        createApiResponse(false, null, 'User not found')
+      );
+    }
+
+    const user = userResult[0];
+
+    // Hash new password
+    const hashedPassword = await hash(newPassword, 12);
+
+    // Update password
+    await db
+      .update(users)
+      .set({
+        passwordHash: hashedPassword,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, user.id));
+
+    // Mark token as used
+    await db
+      .update(passwordResetTokens)
+      .set({
+        isUsed: true,
+        updatedAt: new Date()
+      })
+      .where(eq(passwordResetTokens.id, resetTokenRecord.id));
+
+    // Log activity
+    try {
+      await logActivity(user.id, 'password_reset', 'user', {
+        email: user.email
+      });
+    } catch (auditError) {
+      console.error('Audit logging failed:', auditError);
+    }
+
+    res.json(
+      createApiResponse(true, null, 'Password reset successfully')
+    );
+  } catch (error: any) {
+    console.error('Reset password error:', error);
+    res.status(500).json(
+      createApiResponse(false, null, 'Failed to reset password')
     );
   }
 };

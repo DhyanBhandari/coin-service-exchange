@@ -1,25 +1,26 @@
 import { Router } from 'express';
-import { 
-  register, 
-  login, 
-  getProfile, 
-  updatePassword, 
-  logout, 
-  forgotPassword, 
-  resetPassword,
+import {
+  register,
+  login,
+  getProfile,
+  changePassword, // Corrected import
+  logout,
+  forgotPassword, // Now present in controller
+  resetPassword, // Now present in controller
   firebaseRegister,
-  firebaseLogin 
+  firebaseLogin,
+  updateProfile // New import
 } from '../controllers/auth.controller';
 import { authenticateToken, validateFirebaseToken } from '../middleware/auth.middleware';
 import { validateBody } from '../middleware/validation.middleware';
-import { 
-  registerSchema, 
-  loginSchema, 
-  updatePasswordSchema, 
-  forgotPasswordSchema, 
+import {
+  registerSchema,
+  loginSchema,
+  updatePasswordSchema,
+  forgotPasswordSchema,
   resetPasswordSchema,
   firebaseRegisterSchema,
-  firebaseLoginSchema 
+  firebaseLoginSchema
 } from '../utils/validation';
 
 const router = Router();
@@ -36,7 +37,8 @@ router.post('/firebase-login', validateFirebaseToken, validateBody(firebaseLogin
 
 // Protected routes (work with both auth methods)
 router.get('/profile', authenticateToken, getProfile);
-router.put('/password', authenticateToken, validateBody(updatePasswordSchema), updatePassword);
+router.put('/profile', authenticateToken, updateProfile); // New route
+router.put('/password', authenticateToken, validateBody(updatePasswordSchema), changePassword); // Corrected handler
 router.post('/logout', authenticateToken, logout);
 
 export default router;

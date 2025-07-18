@@ -224,50 +224,49 @@ export class PaymentService {
         .where(eq(paymentTransactions.id, paymentTransaction.id))
         .returning();
 
-      // Create transaction record
-      const amount = parseFloat(paymentTransaction.amount);
-      const transactionData = {
-        userId: parseInt(userId),
-        type: TRANSACTION_TYPES.COIN_PURCHASE,
-        amount: amount.toString(),
-        status: TRANSACTION_STATUS.COMPLETED,
-        description: `Coin purchase via payment: ${razorpay_payment_id}`,
-        paymentId: razorpay_payment_id,
-        paymentMethod: paymentDetails?.method || 'unknown',
-        metadata: {
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id,
-          paymentMethod: paymentDetails?.method || undefined,
-          bank: paymentDetails?.bank || undefined,
-          wallet: paymentDetails?.wallet || undefined,
-          vpa: paymentDetails?.vpa || undefined,
-          userLocation,
-          gatewayFee: paymentDetails?.fee || 0,
-        },
-      };
+     // Create transaction record
+const amount = parseFloat(paymentTransaction.amount);
+const transactionData = {
+  userId: userId, // Changed from parseInt(userId) to userId which is already a string
+  type: TRANSACTION_TYPES.COIN_PURCHASE,
+  amount: amount.toString(),
+  status: TRANSACTION_STATUS.COMPLETED,
+  description: `Coin purchase via payment: ${razorpay_payment_id}`,
+  paymentId: razorpay_payment_id,
+  paymentMethod: paymentDetails?.method || 'unknown',
+  metadata: {
+    razorpayOrderId: razorpay_order_id,
+    razorpayPaymentId: razorpay_payment_id,
+    paymentMethod: paymentDetails?.method || undefined,
+    bank: paymentDetails?.bank || undefined,
+    wallet: paymentDetails?.wallet || undefined,
+    vpa: paymentDetails?.vpa || undefined,
+    userLocation,
+    gatewayFee: paymentDetails?.fee || 0,
+  },
+};
+
 
       await this.transactionService.createTransaction(transactionData);
 
       // Update user wallet balance
       await this.userService.updateWalletBalance(userId, amount.toString(), 'add');
 
-      // Log audit
-      await this.auditService.log({
-        userId: parseInt(userId),
-        action: 'payment_completed',
-        resource: 'payment',
-        resourceId: paymentTransaction.id,
-        newValues: {
-          status: PAYMENT_STATUS.COMPLETED,
-          amount,
-          method: paymentDetails?.method || undefined,
-          region: userLocation?.isIndia ? 'India' : 'International',
-        },
-        metadata: {
-          paymentId: razorpay_payment_id,
-          userLocation,
-        },
-      });
+// Log audit
+await this.auditService.log({
+  userId: paymentTransaction.userId.toString(),
+  action: 'payment_failed',
+  resource: 'payment',
+  resourceId: paymentTransaction.id.toString(),
+  newValues: { 
+    status: PAYMENT_STATUS.FAILED, 
+    reason: paymentDetails?.error_description || 'Payment failed',
+    errorCode: paymentDetails?.error_code
+  },
+});
+
+
+
 
       logger.info(
         `Payment verified successfully: ${razorpay_payment_id} for user: ${userId} from ${
@@ -512,10 +511,10 @@ export class PaymentService {
 
       // Log audit
       await this.auditService.log({
-        userId: paymentTransaction.userId,
+        userId: paymentTransaction.userId.toString(),
         action: 'payment_failed',
         resource: 'payment',
-        resourceId: paymentTransaction.id,
+        resourceId: paymentTransaction.id.toString(),
         newValues: { status: PAYMENT_STATUS.FAILED, reason },
       });
 
@@ -615,7 +614,8 @@ export class PaymentService {
 
       // Create refund transaction record
       await this.transactionService.createTransaction({
-        userId: paymentTransaction.userId,
+        userId: paymentTransaction.userId.toString(),
+
         type: TRANSACTION_TYPES.REFUND,
         amount: refundAmount.toString(),
         status: TRANSACTION_STATUS.COMPLETED,
@@ -631,10 +631,10 @@ export class PaymentService {
 
       // Log audit
       await this.auditService.log({
-        userId: adminId ? parseInt(adminId) : paymentTransaction.userId,
+        userId: adminId ? adminId : paymentTransaction.userId.toString(),
         action: 'refund_processed',
         resource: 'payment',
-        resourceId: paymentTransaction.id,
+        resourceId: paymentTransaction.id.toString(),
         newValues: {
           refundAmount,
           refundId: refund.id,
@@ -713,7 +713,7 @@ export class PaymentService {
 
       // Log audit
       await this.auditService.log({
-        userId: parseInt(userId),
+        userId: userId,
         action: 'save_payment_method',
         resource: 'payment_method',
         resourceId: savedMethod.id,
@@ -767,7 +767,7 @@ export class PaymentService {
 
       // Log audit
       await this.auditService.log({
-        userId: parseInt(userId),
+        userId: userId,
         action: 'delete_payment_method',
         resource: 'payment_method',
         resourceId: methodId,

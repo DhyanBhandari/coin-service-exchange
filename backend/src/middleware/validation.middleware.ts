@@ -11,12 +11,14 @@ export const validateBody = (schema: Joi.ObjectSchema) => {
     });
 
     if (error) {
-      const errorMessage = error.details
+      const errorMessage: string = error.details
         .map(detail => detail.message)
         .join(', ');
       
       res.status(400).json(
-        createApiResponse(false, 'Validation error', null, errorMessage)
+      createApiResponse(false, { error: errorMessage }, 'Validation error')
+
+
       );
       return;
     }
@@ -40,7 +42,7 @@ export const validateQuery = (schema: Joi.ObjectSchema) => {
         .join(', ');
       
       res.status(400).json(
-        createApiResponse(false, 'Query validation error', null, errorMessage)
+        createApiResponse(false,  { error: errorMessage },'Query validation error')
       );
       return;
     }
@@ -63,7 +65,7 @@ export const validateParams = (schema: Joi.ObjectSchema) => {
         .join(', ');
       
       res.status(400).json(
-        createApiResponse(false, 'Parameter validation error', null, errorMessage)
+        createApiResponse(false, { error: errorMessage }, 'Parameter validation error')
       );
       return;
     }

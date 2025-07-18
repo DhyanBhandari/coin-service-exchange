@@ -189,7 +189,7 @@ const AddCoins = () => {
         prefill: {
           name: userData.name || userData.email,
           email: userData.email,
-          contact: userData.phone || ''
+        //  contact: userData.phone || ''
 
         },
         theme: {
