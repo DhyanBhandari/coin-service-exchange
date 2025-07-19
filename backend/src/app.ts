@@ -1,6 +1,5 @@
-// backend/src/app.ts - Updated CORS configuration
+// backend/src/app.ts - Modified for Vercel Deployment
 import express from 'express';
-
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -11,14 +10,16 @@ dotenv.config();
 
 // Initialize database after loading environment variables
 import { initializeDatabase, testConnection } from './config/database';
-import { testSupabaseConnection } from './config/supabase';
 import { testRazorpayConnection } from './config/razorpay';
+
+import { logger } from './utils/logger';
+
 
 // Initialize database connection
 initializeDatabase();
 
 // Import middleware
-import { errorHandler, notFound, asyncHandler } from './middleware/error.middleware';
+import { errorHandler, notFound } from './middleware/error.middleware';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -29,19 +30,16 @@ import conversionRoutes from './routes/conversion.routes';
 import adminRoutes from './routes/admin.routes';
 
 // Import utils
-import { logger } from './utils/logger';
 import { createApiResponse } from './utils/helpers';
 import { API_PREFIX } from './utils/constants';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Enhanced CORS configuration for frontend integration
 // Enhanced CORS configuration for frontend integration
 app.use(cors({
     origin: [
@@ -79,7 +77,7 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Trust proxy for accurate IP addresses
+// Trust proxy for accurate IP addresses in production environments
 app.set('trust proxy', 1);
 
 
@@ -96,20 +94,49 @@ app.get('/', (_req, res) => {
     );
 });
 
+// Health check endpoint with dependency status
+app.get('/health', async (_req, res) => {
+    logger.info('Health check requested');
+    try {
+        const [dbStatus, razorpayStatus] = await Promise.allSettled([
+            testConnection(),
+            testRazorpayConnection(),
+          
+        ]);
 
-
-// Health check endpoint
-app.get('/health', (_req, res) => {
-    res.json(
-        createApiResponse(true, {
+        const healthStatus = {
             status: 'healthy',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             environment: process.env.NODE_ENV,
-            version: process.env.npm_package_version || '1.0.0'
-        })
-    );
+            version: process.env.npm_package_version || '1.0.0',
+            dependencies: {
+                database: {
+                    connected: dbStatus.status === 'fulfilled' && dbStatus.value,
+                    status: dbStatus.status === 'fulfilled' && dbStatus.value ? 'Connected' : 'Connection Failed'
+                },
+                razorpay: {
+                    connected: razorpayStatus.status === 'fulfilled' && razorpayStatus.value,
+                    status: razorpayStatus.status === 'fulfilled' && razorpayStatus.value ? 'Connected' : 'Connection Failed'
+                },
+               
+            }
+        };
+
+        if (healthStatus.dependencies.database.connected && healthStatus.dependencies.razorpay.connected ) {
+            logger.info('Health check passed. All services connected.');
+        } else {
+            logger.warn('Health check completed with connection issues.', healthStatus.dependencies);
+        }
+
+        res.status(200).json(createApiResponse(true, healthStatus));
+
+    } catch (error) {
+        logger.error('Health check failed with an unexpected error:', error);
+        res.status(503).json(createApiResponse(false, null, 'Service Unavailable'));
+    }
 });
+
 
 // API documentation endpoint
 app.get('/api', (_req, res) => {
@@ -123,6 +150,7 @@ app.get('/api', (_req, res) => {
                 services: `${API_PREFIX}/services`,
                 payments: `${API_PREFIX}/payments`,
                 conversions: `${API_PREFIX}/conversions`,
+                transactions: `${API_PREFIX}/transactions`,
                 admin: `${API_PREFIX}/admin`
             }
         })
@@ -143,125 +171,6 @@ app.use(notFound);
 // Global error handler
 app.use(errorHandler);
 
-// Graceful shutdown handling
-const gracefulShutdown = (signal: string) => {
-    logger.info(`Received ${signal}. Starting graceful shutdown...`);
-
-    server.close((err) => {
-        if (err) {
-            logger.error('Error during graceful shutdown:', err);
-            process.exit(1);
-        }
-
-        logger.info('Server closed successfully');
-        process.exit(0);
-    });
-};
-
-// Handle shutdown signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception:', error);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    process.exit(1);
-});
-
-// Start server
-const server = app.listen(PORT, async () => {
-    // Beautiful startup banner
-    console.log('\n' + '='.repeat(80));
-    console.log('🚀 ERTHAEXCHANGE BACKEND SERVER STARTING...');
-    console.log('='.repeat(80));
-    
-    logger.info(`🌐 Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
-    console.log(`📡 Server URL: http://localhost:${PORT}`);
-    console.log(`🔗 API Base URL: http://localhost:${PORT}${API_PREFIX}`);
-    console.log(`💻 Environment: ${process.env.NODE_ENV || 'development'}`);
-    
-    console.log('\n📋 TESTING SERVICE CONNECTIONS...');
-    console.log('-'.repeat(50));
-
-    // Test connections with enhanced logging
-    try {
-        // Set a global timeout for all connection tests
-        const globalTestTimeout = setTimeout(() => {
-            console.log('❌ Connection tests timed out after 15 seconds');
-            console.log('⚠️ Continuing with limited functionality');
-        }, 15000);
-
-        const dbConnected = await testConnection();
-        const supabaseConnected = await testSupabaseConnection();
-        const razorpayConnected = await testRazorpayConnection();
-
-        // Clear the global timeout
-        clearTimeout(globalTestTimeout);
-
-        // Database status
-        if (dbConnected) {
-            console.log('✅ Database (PostgreSQL)    | Connected & Ready');
-        } else {
-            console.log('❌ Database (PostgreSQL)    | Connection Failed - Using mock data');
-        }
-
-        // Supabase status
-        if (supabaseConnected) {
-            console.log('✅ Supabase Storage         | Connected & Ready');
-        } else {
-            console.log('❌ Supabase Storage         | Connection Failed - Using local storage');
-        }
-
-        // Razorpay status
-        if (razorpayConnected) {
-            console.log('✅ Razorpay Payment         | Connected & Ready');
-        } else {
-            console.log('❌ Razorpay Payment         | Connection Failed - Using test mode');
-        }
-
-        console.log('-'.repeat(50));
-
-        // Overall status
-        if (dbConnected && supabaseConnected && razorpayConnected) {
-            console.log('🎉 ALL SERVICES CONNECTED SUCCESSFULLY!');
-            console.log('🔥 Backend is ready to handle requests!');
-            console.log('\n📚 Available API Endpoints:');
-            console.log(`   👤 Authentication: ${API_PREFIX}/auth`);
-            console.log(`   👥 Users:          ${API_PREFIX}/users`);
-            console.log(`   🛍️  Services:       ${API_PREFIX}/services`);
-            console.log(`   💳 Payments:       ${API_PREFIX}/payments`);
-            console.log(`   🔄 Conversions:    ${API_PREFIX}/conversions`);
-            console.log(`   🔧 Admin:          ${API_PREFIX}/admin`);
-            console.log(`   ❤️  Health Check:   /health`);
-            
-            console.log('\n🎯 QUICK START GUIDE:');
-            console.log('   1. Register a user: POST /api/v1/auth/register');
-            console.log('   2. Login: POST /api/v1/auth/login');
-            console.log('   3. Get profile: GET /api/v1/auth/profile');
-            console.log('   4. Check health: GET /health');
-            
-            logger.info('🚀 ErthaExchange Backend Server is fully operational!');
-        } else {
-            console.log('⚠️  SOME SERVICES FAILED TO CONNECT - RUNNING IN DEMO MODE');
-            console.log('🔧 The server will use mock data for unavailable services');
-            console.log('🔍 This is normal in development environments without external services');
-            
-            logger.warn('⚠️  Server started in demo mode with limited functionality');
-        }
-    } catch (error) {
-        console.log('❌ ERROR DURING CONNECTION TESTS');
-        logger.error('Failed to test connections, continuing in demo mode:', error);
-        console.log('⚠️ Server will run with limited functionality');
-    }
-    
-    console.log('\n' + '='.repeat(80));
-    console.log('🎊 ERTHAEXCHANGE BACKEND SERVER READY!');
-    console.log('='.repeat(80) + '\n');
-});
-
+// Vercel requires the app to be exported as a default module.
+// The app.listen() block has been removed as Vercel handles the server lifecycle.
 export default app;
