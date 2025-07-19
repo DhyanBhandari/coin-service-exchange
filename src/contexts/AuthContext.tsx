@@ -1,10 +1,11 @@
-// src/contexts/AuthContext.tsx - Fixed with better error handling
+// src/contexts/AuthContext.tsx - Updated with real API integration
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from 'firebase/auth';
 import { FirebaseAuthService } from '../lib/firebase';
+import { api } from '../lib/api';
 
 interface UserData {
-  id: number;
+  id: string;
   firebaseUid: string;
   email: string;
   name: string;
@@ -51,10 +52,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signUp = async (email: string, password: string, displayName: string, role: 'user' | 'org' = 'user') => {
     try {
       const result = await FirebaseAuthService.signUp(email, password, displayName, role);
-      setUserData(result.userData);
-      // Store in localStorage for immediate access
-      localStorage.setItem('user', JSON.stringify(result.userData));
-      localStorage.setItem('token', await result.user.getIdToken());
+      
+      // Sync user data from API response
+      if (result.userData) {
+        const syncedUserData = {
+          ...result.userData,
+          walletBalance: parseFloat(result.userData.walletBalance || '0')
+        };
+        setUserData(syncedUserData);
+        localStorage.setItem('user', JSON.stringify(syncedUserData));
+      }
+      
+      const token = await result.user.getIdToken();
+      localStorage.setItem('token', token);
+      
       return result;
     } catch (error: any) {
       console.error('Signup error in context:', error);
@@ -65,10 +76,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signIn = async (email: string, password: string) => {
     try {
       const result = await FirebaseAuthService.signIn(email, password);
-      setUserData(result.userData);
-      // Store in localStorage
-      localStorage.setItem('user', JSON.stringify(result.userData));
-      localStorage.setItem('token', await result.user.getIdToken());
+      
+      // Sync user data from API response
+      if (result.userData) {
+        const syncedUserData = {
+          ...result.userData,
+          walletBalance: parseFloat(result.userData.walletBalance || '0')
+        };
+        setUserData(syncedUserData);
+        localStorage.setItem('user', JSON.stringify(syncedUserData));
+      }
+      
+      const token = await result.user.getIdToken();
+      localStorage.setItem('token', token);
+      
       return result;
     } catch (error: any) {
       console.error('Signin error in context:', error);
@@ -79,10 +100,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signInWithGoogle = async (role: 'user' | 'org' = 'user') => {
     try {
       const result = await FirebaseAuthService.signInWithGoogle(role);
-      setUserData(result.userData);
-      // Store in localStorage
-      localStorage.setItem('user', JSON.stringify(result.userData));
-      localStorage.setItem('token', await result.user.getIdToken());
+      
+      // Sync user data from API response
+      if (result.userData) {
+        const syncedUserData = {
+          ...result.userData,
+          walletBalance: parseFloat(result.userData.walletBalance || '0')
+        };
+        setUserData(syncedUserData);
+        localStorage.setItem('user', JSON.stringify(syncedUserData));
+      }
+      
+      const token = await result.user.getIdToken();
+      localStorage.setItem('token', token);
+      
       return result;
     } catch (error: any) {
       console.error('Google signin error in context:', error);
@@ -98,13 +129,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await FirebaseAuthService.signOut();
       setUserData(null);
-      // Clear localStorage
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       localStorage.removeItem('auth');
     } catch (error) {
       console.error('Logout error:', error);
-      // Clear state anyway
       setUserData(null);
       localStorage.removeItem('user');
       localStorage.removeItem('token');
@@ -116,21 +145,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (currentUser) {
       try {
         const token = await currentUser.getIdToken(true);
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+        const response = await api.auth.getProfile();
         
-        const response = await fetch(`${apiUrl}/auth/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setUserData(data.data);
-          localStorage.setItem('user', JSON.stringify(data.data));
+        if (response.success && response.data) {
+          const syncedUserData = {
+            ...(response.data as UserData),
+            walletBalance: parseFloat((response.data as UserData).walletBalance?.toString() || '0')
+
+          };
+          setUserData(syncedUserData);
+          localStorage.setItem('user', JSON.stringify(syncedUserData));
           localStorage.setItem('token', token);
         } else {
-          console.warn('Failed to refresh user data:', response.status);
+          console.warn('Failed to refresh user data:', response);
         }
       } catch (error) {
         console.error('Failed to refresh user data:', error);
@@ -153,53 +180,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (user) {
         try {
-          // Get fresh token and update localStorage
           const token = await user.getIdToken();
           localStorage.setItem('token', token);
           
-          // Try to get user data from localStorage first
-          const storedUserData = localStorage.getItem('user');
-          if (storedUserData) {
-            const parsedUserData = JSON.parse(storedUserData);
-            setUserData(parsedUserData);
-          }
-          
-          // If we don't have userData or if it's stale, fetch from backend
-          if (!userData || !storedUserData) {
-            try {
-              const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
-              const response = await fetch(`${apiUrl}/auth/profile`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`
-                }
-              });
-              
-              if (response.ok) {
-                const data = await response.json();
-                setUserData(data.data);
-                localStorage.setItem('user', JSON.stringify(data.data));
-              } else {
-                console.warn('Failed to fetch user profile from backend:', response.status);
-                // If backend fails but we have a Firebase user, create minimal user data
-                if (!storedUserData) {
-                  const fallbackUserData = {
-                    id: 0,
-                    firebaseUid: user.uid,
-                    email: user.email || '',
-                    name: user.displayName || user.email?.split('@')[0] || 'User',
-                    role: 'user' as const,
-                    walletBalance: 0,
-                    emailVerified: user.emailVerified,
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                  };
-                  setUserData(fallbackUserData);
-                  localStorage.setItem('user', JSON.stringify(fallbackUserData));
-                }
+          // Always fetch fresh user data from API when auth state changes
+          try {
+            const response = await api.auth.getProfile();
+            
+            if (response.success && response.data) {
+              const syncedUserData = {
+                ...(response.data as UserData),
+                   walletBalance: parseFloat((response.data as UserData).walletBalance?.toString() || '0')
+              };
+              setUserData(syncedUserData);
+              localStorage.setItem('user', JSON.stringify(syncedUserData));
+            } else {
+              console.warn('Failed to fetch user profile from backend:', response);
+              // Try to use localStorage data as fallback
+              const storedUserData = localStorage.getItem('user');
+              if (storedUserData) {
+                const parsedUserData = JSON.parse(storedUserData);
+                setUserData({
+                  ...parsedUserData,
+                  walletBalance: parseFloat(parsedUserData.walletBalance || '0')
+                });
               }
-            } catch (fetchError) {
-              console.error('Error fetching user profile:', fetchError);
+            }
+          } catch (fetchError) {
+            console.error('Error fetching user profile:', fetchError);
+            // Use localStorage as fallback
+            const storedUserData = localStorage.getItem('user');
+            if (storedUserData) {
+              const parsedUserData = JSON.parse(storedUserData);
+              setUserData({
+                ...parsedUserData,
+                walletBalance: parseFloat(parsedUserData.walletBalance || '0')
+              });
             }
           }
         } catch (error) {
@@ -218,17 +234,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return unsubscribe;
   }, []);
 
-  // Auto-refresh token every 45 minutes
+  // Auto-refresh token and user data every 30 minutes
   useEffect(() => {
     if (currentUser) {
       const interval = setInterval(async () => {
         try {
-          const token = await currentUser.getIdToken(true);
-          localStorage.setItem('token', token);
+          await refreshUserData();
         } catch (error) {
-          console.error('Failed to refresh token:', error);
+          console.error('Failed to refresh user data:', error);
         }
-      }, 45 * 60 * 1000); // 45 minutes
+      }, 30 * 60 * 1000); // 30 minutes
 
       return () => clearInterval(interval);
     }

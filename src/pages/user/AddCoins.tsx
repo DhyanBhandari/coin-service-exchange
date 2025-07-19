@@ -1,4 +1,4 @@
-// src/pages/user/AddCoins.tsx
+// src/pages/user/AddCoins.tsx - Updated with proper API integration
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, Coins, CreditCard, AlertCircle, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/api";
+import { useUserData } from "@/contexts/UserDataContext";
+import { api, apiUtils } from "@/lib/api";
 
-// Extend Window interface for Razorpay
 declare global {
   interface Window {
     Razorpay: any;
@@ -28,15 +28,14 @@ interface RazorpayResponse {
 const AddCoins = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { userData } = useAuth();
+  const { userData, refreshUserData } = useAuth();
+  const { refreshUserData: refreshUserStats } = useUserData();
   
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [userLocation, setUserLocation] = useState<any>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  // Predefined coin packages
   const coinPackages = [
     { coins: 100, price: 100, bonus: 0, popular: false },
     { coins: 500, price: 500, bonus: 25, popular: true },
@@ -71,20 +70,14 @@ const AddCoins = () => {
     loadRazorpayScript();
   }, []);
 
-  // Get user location for region-specific pricing
+  // Get user location
   useEffect(() => {
     const getUserLocation = async () => {
       try {
-        const response = await fetch('https://ipapi.co/json/');
-        const data = await response.json();
-        setUserLocation({
-          country: data.country_name,
-          countryCode: data.country_code,
-          isIndia: data.country_code === 'IN'
-        });
+        const location = await apiUtils.getUserLocation();
+        setUserLocation(location);
       } catch (error) {
         console.error('Failed to get location:', error);
-        // Default to India if location detection fails
         setUserLocation({
           country: 'India',
           countryCode: 'IN',
@@ -96,12 +89,10 @@ const AddCoins = () => {
     getUserLocation();
   }, []);
 
-  // Handle predefined package selection
   const handlePackageSelect = (packageInfo: any) => {
     setAmount(packageInfo.price.toString());
   };
 
-  // Create Razorpay order
   const createRazorpayOrder = async (paymentAmount: number) => {
     try {
       const response = await api.payments.createOrder({
@@ -114,15 +105,14 @@ const AddCoins = () => {
       if (response.success) {
         return response.data;
       } else {
-        throw new Error(response.error || 'Failed to create order');
+        throw new Error(response.message || 'Failed to create order');
       }
     } catch (error: any) {
       console.error('Create order error:', error);
-      throw error;
+      throw new Error(apiUtils.handleError(error));
     }
   };
 
-  // Verify payment after successful payment
   const verifyPayment = async (paymentResponse: RazorpayResponse) => {
     try {
       const response = await api.payments.verifyPayment({
@@ -135,15 +125,14 @@ const AddCoins = () => {
       if (response.success) {
         return response.data;
       } else {
-        throw new Error(response.error || 'Payment verification failed');
+        throw new Error(response.message || 'Payment verification failed');
       }
     } catch (error: any) {
       console.error('Payment verification error:', error);
-      throw error;
+      throw new Error(apiUtils.handleError(error));
     }
   };
 
-  // Handle payment process
   const handlePayment = async () => {
     if (!amount || parseFloat(amount) <= 0) {
       toast({
@@ -189,8 +178,6 @@ const AddCoins = () => {
         prefill: {
           name: userData.name || userData.email,
           email: userData.email,
-        //  contact: userData.phone || ''
-
         },
         theme: {
           color: '#3B82F6'
@@ -205,8 +192,14 @@ const AddCoins = () => {
               description: "Coins have been added to your wallet",
             });
 
-            // Redirect to transactions or dashboard
-            navigate('/transactions');
+            // Refresh user data to show updated balance
+            await refreshUserData();
+            await refreshUserStats();
+
+            // Redirect after a short delay to show the success message
+            setTimeout(() => {
+              navigate('/dashboard/user');
+            }, 2000);
           } catch (error: any) {
             console.error('Payment verification failed:', error);
             toast({
@@ -214,6 +207,8 @@ const AddCoins = () => {
               description: error.message || "Please contact support",
               variant: "destructive",
             });
+          } finally {
+            setIsProcessing(false);
           }
         },
         modal: {
@@ -275,6 +270,18 @@ const AddCoins = () => {
               </span>
             )}
           </p>
+          
+          {/* Current Balance Display */}
+          {userData && (
+            <div className="mt-4 bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex items-center space-x-2">
+                <Coins className="h-5 w-5 text-blue-600" />
+                <span className="text-blue-900 font-medium">Current Balance:</span>
+                <span className="text-2xl font-bold text-blue-600">{userData.walletBalance}</span>
+                <span className="text-blue-600">coins</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
@@ -390,7 +397,7 @@ const AddCoins = () => {
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    Pay {amount ? `${userLocation?.isIndia ? '₹' : '$'}${amount}` : 'Amount'}
+                    Pay {amount ? `${userLocation?.isIndia ? '₹' : '$'}{amount}` : 'Amount'}
                   </>
                 )}
               </Button>
