@@ -7,6 +7,24 @@ import { USER_ROLES, SERVICE_STATUS } from '../utils/constants';
 import { logger } from '../utils/logger';
 
 export class AdminService {
+  static createServiceCategory(name: any, description: any) {
+    throw new Error('Method not implemented.');
+  }
+  static suspendUser(id: string) {
+    throw new Error('Method not implemented.');
+  }
+  static approveService(id: string) {
+    throw new Error('Method not implemented.');
+  }
+  static getSystemHealth() {
+    throw new Error('Method not implemented.');
+  }
+  static getManagementData() {
+    throw new Error('Method not implemented.');
+  }
+  static getDashboardStats() {
+    throw new Error('Method not implemented.');
+  }
   async getDashboardStats(): Promise<DashboardStats> {
     try {
       const db = getDb();
@@ -21,7 +39,7 @@ export class AdminService {
       const activeUsers = await db
         .select({ count: count() })
         .from(users)
-        .where(eq(users.status, 'active'));
+        .where(eq(users.isActive, true));
 
       const newUsersThisMonth = await db
         .select({ count: count() })
@@ -53,7 +71,7 @@ export class AdminService {
         .where(eq(services.status, SERVICE_STATUS.PENDING));
 
       const totalBookingsResult = await db
-        .select({ total: sql<number>`sum(${services.bookings})` })
+        .select({ total: sql<number>`sum(${services.bookingCount})` })
         .from(services);
 
       const serviceStats: ServiceStats = {
@@ -66,9 +84,10 @@ export class AdminService {
       // Financial stats
       const allUsers = await db.select().from(users);
       const totalCoinsInCirculation = allUsers.reduce(
-        (sum, user) => sum + parseFloat(user.walletBalance),
+        (sum, user) => sum + parseFloat(user.walletBalance?.toString() || '0'),
         0
       );
+
 
       const totalRevenue = 0;
       const thisMonthRevenue = 0;
@@ -116,7 +135,7 @@ export class AdminService {
       return {
         services: recentServices,
         users: recentUsers.map(user => {
-          const { password, ...safeUser } = user;
+          const { passwordHash, ...safeUser } = user;
           return safeUser;
         })
       };
