@@ -17,19 +17,6 @@ export const SERVICE_STATUS = {
   SUSPENDED: 'suspended'
 } as const;
 
-export const TRANSACTION_TYPES = {
-  COIN_PURCHASE: 'coin_purchase',
-  SERVICE_BOOKING: 'service_booking',
-  COIN_CONVERSION: 'coin_conversion',
-  REFUND: 'refund'
-} as const;
-
-export const TRANSACTION_STATUS = {
-  PENDING: 'pending',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-  CANCELLED: 'cancelled'
-} as const;
 
 export const CONVERSION_STATUS = {
   PENDING: 'pending',
@@ -93,7 +80,6 @@ export const AUDIT_ACTIONS = {
 export const AUDIT_RESOURCES = {
   USER: 'user',
   SERVICE: 'service',
-  TRANSACTION: 'transaction',
   CONVERSION: 'conversion',
   PAYMENT: 'payment'
 } as const;

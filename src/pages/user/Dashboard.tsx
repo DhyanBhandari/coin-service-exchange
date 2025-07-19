@@ -4,17 +4,16 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Plus, ShoppingBag, Receipt, ArrowRight, Wallet, TrendingUp, Home, Menu, Calendar, CheckCircle } from "lucide-react";
+import { Coins, Plus, ShoppingBag, ArrowRight, Wallet, Home, Menu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserData } from "@/contexts/UserDataContext";
 
 const UserDashboard = () => {
   const { userData, logout } = useAuth();
-  const { userStats, getRecentActivity } = useUserData();
+  const { userStats } = useUserData();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
     if (!userData) {
@@ -32,8 +31,6 @@ const UserDashboard = () => {
       return;
     }
 
-    // Load recent activity
-    setRecentActivity(getRecentActivity());
   }, [navigate, toast, userData, userStats]);
 
   const handleLogout = async () => {
@@ -66,38 +63,6 @@ const UserDashboard = () => {
     return date.toLocaleDateString();
   };
 
-  const getActivityIcon = (activity: any) => {
-    if ('activityType' in activity && activity.activityType === 'booking') {
-      return <CheckCircle className="h-4 w-4 text-green-600" />;
-    }
-    return activity.type === 'spent' 
-      ? <TrendingUp className="h-4 w-4 text-red-600 rotate-45" />
-      : <TrendingUp className="h-4 w-4 text-green-600" />;
-  };
-
-  const getActivityText = (activity: any) => {
-    if ('activityType' in activity && activity.activityType === 'booking') {
-      return `Booked ${activity.serviceName}`;
-    }
-    return activity.type === 'spent' 
-      ? `Spent on ${activity.service || 'Service'}`
-      : `Added to wallet`;
-  };
-
-  const getActivityAmount = (activity: any) => {
-    if ('activityType' in activity && activity.activityType === 'booking') {
-      return `${activity.price} coins`;
-    }
-    return `${activity.type === 'spent' ? '-' : '+'}${activity.amount} coins`;
-  };
-
-  const getActivityDate = (activity: any) => {
-    if ('activityType' in activity && activity.activityType === 'booking') {
-      return formatDate(activity.bookedAt);
-    }
-    return formatDate(activity.date);
-  };
-
   if (!userData) return null;
 
   return (
@@ -125,7 +90,6 @@ const UserDashboard = () => {
                 Home
               </Link>
               <Link to="/services" className="text-gray-700 hover:text-blue-600 transition-colors">Services</Link>
-              <Link to="/transactions" className="text-gray-700 hover:text-blue-600 transition-colors">Transactions</Link>
               
               <div className="flex items-center space-x-3 ml-6 pl-6 border-l border-gray-200">
                 <div className="text-right hidden sm:block">
@@ -203,7 +167,7 @@ const UserDashboard = () => {
             </Card>
 
             {/* Quick Actions */}
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-1 gap-4">
               <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -228,96 +192,8 @@ const UserDashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-3 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                        <Receipt className="h-6 w-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">My Transactions</CardTitle>
-                        <CardDescription>Track your spending</CardDescription>
-                      </div>
-                    </div>
-                    <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Link to="/transactions">
-                    <Button variant="outline" className="w-full group-hover:bg-gray-50 transition-colors">
-                      View History
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
             </div>
 
-            {/* Recent Activity */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>Your latest transactions and bookings</CardDescription>
-                  </div>
-                  <Link to="/transactions">
-                    <Button variant="ghost" size="sm">
-                      View All
-                      <ArrowRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {recentActivity.length > 0 ? (
-                    recentActivity.map((activity, index) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 rounded-full bg-white">
-                            {getActivityIcon(activity)}
-                          </div>
-                          <div>
-                            <p className="font-medium">{getActivityText(activity)}</p>
-                            <p className="text-sm text-gray-500">
-                              {'organization' in activity ? activity.organization : 
-                               'activityType' in activity && activity.activityType === 'booking' ? activity.organization :
-                               'ErthaExchange'}
-                            </p>
-                            <p className="text-xs text-gray-400">{getActivityDate(activity)}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-blue-600">
-                            {getActivityAmount(activity)}
-                          </p>
-                          {'activityType' in activity && activity.activityType === 'booking' && (
-                            <Badge className="text-xs bg-green-100 text-green-800 mt-1">
-                              Booked
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No activity yet</h3>
-                      <p className="text-gray-600 mb-4">Start by browsing services or adding coins to your wallet</p>
-                      <div className="flex space-x-2 justify-center">
-                        <Link to="/services">
-                          <Button size="sm">Browse Services</Button>
-                        </Link>
-                        <Link to="/wallet/add">
-                          <Button size="sm" variant="outline">Add Coins</Button>
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Sidebar */}
@@ -423,12 +299,6 @@ const UserDashboard = () => {
                   <Button variant="ghost" className="w-full justify-start text-blue-700 hover:bg-blue-100">
                     <ShoppingBag className="h-4 w-4 mr-2" />
                     Browse Services
-                  </Button>
-                </Link>
-                <Link to="/transactions">
-                  <Button variant="ghost" className="w-full justify-start text-blue-700 hover:bg-blue-100">
-                    <Receipt className="h-4 w-4 mr-2" />
-                    View Transactions
                   </Button>
                 </Link>
               </CardContent>

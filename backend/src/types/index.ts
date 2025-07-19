@@ -59,14 +59,6 @@ export interface ServiceFilters {
   organizationId?: string;
 }
 
-export interface TransactionFilters {
-  type?: string;
-  status?: string;
-  userId?: string;
-  serviceId?: string;
-  startDate?: string;
-  endDate?: string;
-}
 
 export interface UserStats {
   totalUsers: number;

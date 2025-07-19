@@ -98,7 +98,6 @@ const Navigation = () => {
       case 'user':
         return [
           { path: '/services', label: 'Services', icon: ShoppingBag },
-          { path: '/transactions', label: 'Transactions', icon: Receipt },
         ];
       case 'org':
         return [

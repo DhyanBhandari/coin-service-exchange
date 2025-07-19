@@ -26,7 +26,6 @@ import userRoutes from './routes/user.routes';
 import serviceRoutes from './routes/service.routes';
 import paymentRoutes from './routes/payment.routes';
 import conversionRoutes from './routes/conversion.routes';
-import transactionRoutes from './routes/transaction.routes';
 import adminRoutes from './routes/admin.routes';
 
 // Import utils
@@ -124,7 +123,6 @@ app.get('/api', (_req, res) => {
                 services: `${API_PREFIX}/services`,
                 payments: `${API_PREFIX}/payments`,
                 conversions: `${API_PREFIX}/conversions`,
-                transactions: `${API_PREFIX}/transactions`,
                 admin: `${API_PREFIX}/admin`
             }
         })
@@ -137,7 +135,6 @@ app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/services`, serviceRoutes);
 app.use(`${API_PREFIX}/payments`, paymentRoutes);
 app.use(`${API_PREFIX}/conversions`, conversionRoutes);
-app.use(`${API_PREFIX}/transactions`, transactionRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 
 // 404 handler
@@ -239,7 +236,6 @@ const server = app.listen(PORT, async () => {
             console.log(`   🛍️  Services:       ${API_PREFIX}/services`);
             console.log(`   💳 Payments:       ${API_PREFIX}/payments`);
             console.log(`   🔄 Conversions:    ${API_PREFIX}/conversions`);
-            console.log(`   📊 Transactions:   ${API_PREFIX}/transactions`);
             console.log(`   🔧 Admin:          ${API_PREFIX}/admin`);
             console.log(`   ❤️  Health Check:   /health`);
             

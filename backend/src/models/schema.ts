@@ -149,55 +149,6 @@ export const serviceBookings = pgTable('service_bookings', {
   cancelledByFk: foreignKey({ columns: [table.cancelledBy], foreignColumns: [users.id], name: 'service_bookings_cancelled_by_fk' }),
 }));
 
-// Transactions table
-export const transactions = pgTable('transactions', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull(),
-  serviceId: uuid('service_id'),
-  bookingId: uuid('booking_id'),
-  type: text('type').notNull(),
-  subType: text('sub_type'),
-  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
-  coinAmount: decimal('coin_amount', { precision: 12, scale: 2 }),
-  fiatAmount: decimal('fiat_amount', { precision: 12, scale: 2 }),
-  currency: varchar('currency', { length: 3 }).default('INR'),
-  exchangeRate: decimal('exchange_rate', { precision: 10, scale: 4 }),
-  description: text('description').notNull(),
-  status: text('status').default('pending'),
-  referenceId: varchar('reference_id', { length: 100 }),
-  referenceType: varchar('reference_type', { length: 50 }),
-  paymentId: text('payment_id'),
-  paymentMethod: text('payment_method'),
-  paymentProvider: text('payment_provider'),
-  balanceBefore: decimal('balance_before', { precision: 12, scale: 2 }),
-  balanceAfter: decimal('balance_after', { precision: 12, scale: 2 }),
-  fees: decimal('fees', { precision: 12, scale: 2 }).default('0.00'),
-  taxes: decimal('taxes', { precision: 12, scale: 2 }).default('0.00'),
-  processedAt: timestamp('processed_at'),
-  processedBy: uuid('processed_by'),
-  failureReason: text('failure_reason'),
-  retryCount: integer('retry_count').default(0),
-  metadata: jsonb('metadata'),
-  tags: json('tags').$type<string[]>().default([]),
-  isReversible: boolean('is_reversible').default(true),
-  reversedTransactionId: uuid('reversed_transaction_id'),
-  parentTransactionId: uuid('parent_transaction_id'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => ({
-  userIdx: index('transactions_user_idx').on(table.userId),
-  serviceIdx: index('transactions_service_idx').on(table.serviceId),
-  bookingIdx: index('transactions_booking_idx').on(table.bookingId),
-  typeIdx: index('transactions_type_idx').on(table.type),
-  statusIdx: index('transactions_status_idx').on(table.status),
-  referenceIdx: index('transactions_reference_idx').on(table.referenceId),
-  paymentIdx: index('transactions_payment_idx').on(table.paymentId),
-  createdAtIdx: index('transactions_created_at_idx').on(table.createdAt),
-  userFk: foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: 'transactions_user_fk' }),
-  serviceFk: foreignKey({ columns: [table.serviceId], foreignColumns: [services.id], name: 'transactions_service_fk' }),
-  bookingFk: foreignKey({ columns: [table.bookingId], foreignColumns: [serviceBookings.id], name: 'transactions_booking_fk' }),
-  processedByFk: foreignKey({ columns: [table.processedBy], foreignColumns: [users.id], name: 'transactions_processed_by_fk' }),
-}));
 
 // Conversion requests table
 export const conversionRequests = pgTable('conversion_requests', {
@@ -311,7 +262,6 @@ export const paymentTransactions = pgTable('payment_transactions', {
   gatewayIdx: index('payment_transactions_gateway_idx').on(table.gateway),
   createdAtIdx: index('payment_transactions_created_at_idx').on(table.createdAt),
   userFk: foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: 'payment_transactions_user_fk' }),
-  transactionFk: foreignKey({ columns: [table.transactionId], foreignColumns: [transactions.id], name: 'payment_transactions_transaction_fk' }),
   paymentMethodFk: foreignKey({ columns: [table.paymentMethodId], foreignColumns: [paymentMethods.id], name: 'payment_transactions_payment_method_fk' }),
   bookingFk: foreignKey({ columns: [table.bookingId], foreignColumns: [serviceBookings.id], name: 'payment_transactions_booking_fk' }),
 }));
@@ -575,7 +525,6 @@ export const promotionalCodeUsage = pgTable('promotional_code_usage', {
   promoCodeFk: foreignKey({ columns: [table.promoCodeId], foreignColumns: [promotionalCodes.id], name: 'promotional_code_usage_promo_code_fk' }),
   userFk: foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: 'promotional_code_usage_user_fk' }),
   bookingFk: foreignKey({ columns: [table.bookingId], foreignColumns: [serviceBookings.id], name: 'promotional_code_usage_booking_fk' }),
-  transactionFk: foreignKey({ columns: [table.transactionId], foreignColumns: [transactions.id], name: 'promotional_code_usage_transaction_fk' }),
 }));
 
 // System settings table
@@ -603,7 +552,6 @@ export const systemSettings = pgTable('system_settings', {
 export const usersRelations = relations(users, ({ many }) => ({
   services: many(services),
   serviceBookings: many(serviceBookings),
-  transactions: many(transactions),
   conversionRequests: many(conversionRequests),
   paymentMethods: many(paymentMethods),
   paymentTransactions: many(paymentTransactions),
@@ -631,7 +579,6 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
     references: [users.id]
   }),
   bookings: many(serviceBookings),
-  transactions: many(transactions),
   reviews: many(serviceReviews),
   favorites: many(userFavorites),
 }));
@@ -649,32 +596,11 @@ export const serviceBookingsRelations = relations(serviceBookings, ({ one, many 
     fields: [serviceBookings.cancelledBy],
     references: [users.id]
   }),
-  transactions: many(transactions),
   paymentTransactions: many(paymentTransactions),
   reviews: many(serviceReviews),
   promotionalCodeUsage: many(promotionalCodeUsage),
 }));
 
-export const transactionsRelations = relations(transactions, ({ one, many }) => ({
-  user: one(users, {
-    fields: [transactions.userId],
-    references: [users.id]
-  }),
-  service: one(services, {
-    fields: [transactions.serviceId],
-    references: [services.id]
-  }),
-  booking: one(serviceBookings, {
-    fields: [transactions.bookingId],
-    references: [serviceBookings.id]
-  }),
-  processedBy: one(users, {
-    fields: [transactions.processedBy],
-    references: [users.id]
-  }),
-  paymentTransactions: many(paymentTransactions),
-  promotionalCodeUsage: many(promotionalCodeUsage),
-}));
 
 export const conversionRequestsRelations = relations(conversionRequests, ({ one }) => ({
   organization: one(users, {
@@ -699,10 +625,6 @@ export const paymentTransactionsRelations = relations(paymentTransactions, ({ on
   user: one(users, {
     fields: [paymentTransactions.userId],
     references: [users.id]
-  }),
-  transaction: one(transactions, {
-    fields: [paymentTransactions.transactionId],
-    references: [transactions.id]
   }),
   paymentMethod: one(paymentMethods, {
     fields: [paymentTransactions.paymentMethodId],
@@ -805,10 +727,6 @@ export const promotionalCodeUsageRelations = relations(promotionalCodeUsage, ({ 
     fields: [promotionalCodeUsage.bookingId],
     references: [serviceBookings.id]
   }),
-  transaction: one(transactions, {
-    fields: [promotionalCodeUsage.transactionId],
-    references: [transactions.id]
-  }),
 }));
 
 export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
@@ -825,8 +743,6 @@ export type Service = typeof services.$inferSelect;
 export type NewService = typeof services.$inferInsert;
 export type ServiceBooking = typeof serviceBookings.$inferSelect;
 export type NewServiceBooking = typeof serviceBookings.$inferInsert;
-export type Transaction = typeof transactions.$inferSelect;
-export type NewTransaction = typeof transactions.$inferInsert;
 export type ConversionRequest = typeof conversionRequests.$inferSelect;
 export type NewConversionRequest = typeof conversionRequests.$inferInsert;
 export type PaymentMethod = typeof paymentMethods.$inferSelect;

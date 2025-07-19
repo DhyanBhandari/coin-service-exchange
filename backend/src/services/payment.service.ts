@@ -6,8 +6,7 @@ import { eq, sql, and } from 'drizzle-orm';
 import { PaymentOrderData, PaymentVerificationData } from '../types';
 import { razorpay, razorpayConfig } from '../config/razorpay';
 import { createError, generateOrderId } from '../utils/helpers';
-import { PAYMENT_STATUS, TRANSACTION_TYPES } from '../utils/constants';
-import { TransactionService } from './transaction.service';
+import { PAYMENT_STATUS } from '../utils/constants';
 import { UserService } from './user.service';
 import { AuditService } from './audit.service';
 import { logger } from '../utils/logger';
@@ -19,12 +18,10 @@ import * as schema from '../models/schema';
 type Tx = PgTransaction<any, typeof schema, any>;
 
 export class PaymentService {
-  private transactionService: TransactionService;
   private userService: UserService;
   private auditService: AuditService;
 
   constructor() {
-    this.transactionService = new TransactionService();
     this.userService = new UserService();
     this.auditService = new AuditService();
   }
@@ -104,7 +101,7 @@ export class PaymentService {
   async verifyPayment(
     verificationData: PaymentVerificationData,
     userId: string
-  ): Promise<{ success: boolean; message: string; transactionId?: string }> {
+  ): Promise<{ success: boolean; message: string }> {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = verificationData;
 
     if (!userId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -147,21 +144,6 @@ export class PaymentService {
 
         const { balanceBefore, balanceAfter } = await this.userService.updateWalletBalance(userId, amountToAdd, 'add', tx);
         
-        const newTransaction = await this.transactionService.createTransaction({
-            userId,
-            type: TRANSACTION_TYPES.COIN_PURCHASE,
-            subType: `payment_${paymentDetails.method || 'razorpay'}`,
-            amount: amountToAdd.toString(),
-            coinAmount: amountToAdd.toString(),
-            description: `Coin purchase via payment: ${razorpay_payment_id}`,
-            status: 'completed',
-            paymentId: razorpay_payment_id,
-            paymentMethod: paymentDetails.method || 'online',
-            paymentProvider: 'razorpay',
-            balanceBefore: balanceBefore.toString(),
-            balanceAfter: balanceAfter.toString(),
-            metadata: { razorpayOrderId: razorpay_order_id },
-        }, tx);
 
         await tx
           .update(paymentTransactions)
@@ -174,14 +156,13 @@ export class PaymentService {
           })
           .where(eq(paymentTransactions.id, paymentRecord.id));
 
-        return { transactionId: newTransaction.id };
+        return { success: true };
       });
 
       logger.info(`Payment verified and coins credited for order: ${razorpay_order_id}`);
       return {
           success: true,
           message: 'Payment verified and coins added successfully.',
-          transactionId: result.transactionId,
       };
 
     } catch (error: any) {
@@ -248,17 +229,6 @@ export class PaymentService {
 
             const { balanceBefore, balanceAfter } = await this.userService.updateWalletBalance(paymentTransaction.userId!, refundAmount, 'subtract', tx);
 
-            await this.transactionService.createTransaction({
-                userId: paymentTransaction.userId!,
-                type: TRANSACTION_TYPES.REFUND,
-                amount: refundAmount.toString(),
-                status: 'completed',
-                description: `Refund for payment: ${paymentId}`,
-                paymentId: refund.id,
-                balanceBefore: balanceBefore.toString(),
-                balanceAfter: balanceAfter.toString(),
-                metadata: { originalPaymentId: paymentId, refundId: refund.id, reason },
-            }, tx);
             
             const [updatedTransaction] = await tx
                 .update(paymentTransactions)

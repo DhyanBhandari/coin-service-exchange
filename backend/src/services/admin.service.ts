@@ -1,9 +1,9 @@
 // Fixed admin.service.ts
 import { getDb } from '../config/database';
-import { users, services, transactions, conversionRequests } from '../models/schema';
+import { users, services, conversionRequests } from '../models/schema';
 import { eq, count, desc, gte, sql } from 'drizzle-orm';
 import { DashboardStats, UserStats, ServiceStats, FinancialStats } from '../types';
-import { USER_ROLES, SERVICE_STATUS, TRANSACTION_STATUS } from '../utils/constants';
+import { USER_ROLES, SERVICE_STATUS } from '../utils/constants';
 import { logger } from '../utils/logger';
 
 export class AdminService {
@@ -70,18 +70,8 @@ export class AdminService {
         0
       );
 
-      const completedTransactions = await db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.status, TRANSACTION_STATUS.COMPLETED));
-
-      const totalRevenue = completedTransactions
-        .filter(t => t.type === 'coin_purchase')
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-      const thisMonthRevenue = completedTransactions
-        .filter(t => t.type === 'coin_purchase' && t.createdAt >= thisMonth)
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const totalRevenue = 0;
+      const thisMonthRevenue = 0;
 
       const pendingConversions = await db
         .select({ count: count() })
@@ -110,11 +100,6 @@ export class AdminService {
     try {
       const db = getDb();
 
-      const recentTransactions = await db
-        .select()
-        .from(transactions)
-        .orderBy(desc(transactions.createdAt))
-        .limit(limit);
 
       const recentServices = await db
         .select()
@@ -129,7 +114,6 @@ export class AdminService {
         .limit(limit);
 
       return {
-        transactions: recentTransactions,
         services: recentServices,
         users: recentUsers.map(user => {
           const { password, ...safeUser } = user;

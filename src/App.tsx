@@ -18,7 +18,6 @@ import Signup from "./pages/Signup";
 import UserDashboard from "./pages/user/Dashboard";
 import AddCoins from "./pages/user/AddCoins";
 import BrowseServices from "./pages/user/BrowseServices";
-import UserTransactions from "./pages/user/Transactions";
 import OrgDashboard from "./pages/org/Dashboard";
 import OrgServices from "./pages/org/Services";
 import OrgConvert from "./pages/org/Convert";
@@ -57,9 +56,9 @@ const App = () => (
       <AuthProvider>
         <UserDataProvider>
           <BrowserRouter>
-            {/* Global Navigation - Always visible */}
-            <Navigation />
-            
+            {/* Global Navigation - Always visible   <Navigation /> */}
+           
+
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Index />} />
@@ -122,14 +121,6 @@ const App = () => (
                 element={
                   <ProtectedRoute allowedRoles="user">
                     <BrowseServices />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/transactions"
-                element={
-                  <ProtectedRoute allowedRoles="user">
-                    <UserTransactions />
                   </ProtectedRoute>
                 }
               />

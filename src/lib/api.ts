@@ -278,23 +278,6 @@ export const api = {
       apiClient.get(`/payments/history${params ? `?${params.toString()}` : ''}`),
   },
 
-  // Transactions
-  transactions: {
-    getAll: (params?: URLSearchParams) => 
-      apiClient.get(`/transactions${params ? `?${params.toString()}` : ''}`),
-    getById: (id: string) => 
-      apiClient.get(`/transactions/${id}`),
-    getStats: () => 
-      apiClient.get('/transactions/stats'),
-    getHistory: (params?: URLSearchParams) => 
-      apiClient.get(`/transactions/history${params ? `?${params.toString()}` : ''}`),
-    create: (data: any) => 
-      apiClient.post('/transactions', data),
-    update: (id: string, data: any) => 
-      apiClient.put(`/transactions/${id}`, data),
-    delete: (id: string) => 
-      apiClient.delete(`/transactions/${id}`),
-  },
 
   // Conversions (for organizations)
   conversions: {

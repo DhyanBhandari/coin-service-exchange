@@ -3,20 +3,17 @@ import { conversionRequests } from '../models/schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { ConversionRequest, NewConversionRequest } from '../models/schema';
 import { createError, calculatePagination } from '../utils/helpers';
-import { CONVERSION_STATUS, TRANSACTION_TYPES, TRANSACTION_STATUS } from '../utils/constants';
+import { CONVERSION_STATUS } from '../utils/constants';
 import { PaginationParams, PaginatedResponse } from '../types';
-import { TransactionService } from './transaction.service';
 import { UserService } from './user.service';
 import { AuditService } from './audit.service';
 import { logger } from '../utils/logger';
 
 export class ConversionService {
-  private transactionService: TransactionService;
   private userService: UserService;
   private auditService: AuditService;
 
   constructor() {
-    this.transactionService = new TransactionService();
     this.userService = new UserService();
     this.auditService = new AuditService();
   }
@@ -151,19 +148,6 @@ export class ConversionService {
         'subtract'
       );
 
-      // Create transaction record
-      await this.transactionService.createTransaction({
-        userId: request.organizationId,
-        type: TRANSACTION_TYPES.COIN_CONVERSION,
-        amount: amount.toString(),
-        status: TRANSACTION_STATUS.COMPLETED,
-        description: `Coin conversion to bank account`,
-        metadata: {
-          conversionRequestId: requestId,
-          bankDetails: request.bankDetails,
-          transactionId
-        }
-      });
 
       // Log audit
       await this.auditService.log({
