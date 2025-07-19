@@ -83,6 +83,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
 
+
 // Root route handler
 app.get('/', (_req, res) => {
     res.json(
@@ -96,6 +97,8 @@ app.get('/', (_req, res) => {
     );
 });
 
+
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
     res.json(
@@ -105,7 +108,7 @@ app.get('/health', (_req, res) => {
             uptime: process.uptime(),
             environment: process.env.NODE_ENV,
             version: process.env.npm_package_version || '1.0.0'
-        }, 'Server is healthy')
+        })
     );
 });
 
@@ -124,7 +127,7 @@ app.get('/api', (_req, res) => {
                 transactions: `${API_PREFIX}/transactions`,
                 admin: `${API_PREFIX}/admin`
             }
-        }, 'ErthaExchange API')
+        })
     );
 });
 

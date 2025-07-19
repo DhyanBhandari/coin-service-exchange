@@ -29,7 +29,7 @@ const AddCoins = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { userData, refreshUserData } = useAuth();
-  const { refreshUserData: refreshUserStats } = useUserData();
+  const { refreshUserData: refreshUserStats, addCoins } = useUserData();
   
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -185,21 +185,38 @@ const AddCoins = () => {
         handler: async (response: RazorpayResponse) => {
           try {
             // Verify payment
-            await verifyPayment(response);
+            const verificationResult = await verifyPayment(response);
             
-            toast({
-              title: "Payment Successful!",
-              description: "Coins have been added to your wallet",
-            });
+            // Add coins to user data context (this creates the transaction record)
+            const success = await addCoins(parseFloat(amount), 'razorpay');
+            
+            if (success) {
+              toast({
+                title: "Payment Successful!",
+                description: `${amount} coins have been added to your wallet`,
+              });
 
-            // Refresh user data to show updated balance
-            await refreshUserData();
-            await refreshUserStats();
+              // Multiple refresh attempts to ensure data updates
+              console.log('Payment successful, refreshing data...');
+              await Promise.all([
+                refreshUserData(),
+                refreshUserStats()
+              ]);
+              
+              // Force another refresh after a short delay
+              setTimeout(async () => {
+                console.log('Force refreshing data after delay...');
+                await refreshUserData();
+                await refreshUserStats();
+              }, 1000);
 
-            // Redirect after a short delay to show the success message
-            setTimeout(() => {
-              navigate('/dashboard/user');
-            }, 2000);
+              // Redirect after a longer delay to ensure data is updated
+              setTimeout(() => {
+                navigate('/dashboard/user');
+              }, 3000);
+            } else {
+              throw new Error('Failed to update local transaction data');
+            }
           } catch (error: any) {
             console.error('Payment verification failed:', error);
             toast({

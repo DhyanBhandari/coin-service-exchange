@@ -38,6 +38,7 @@ const BrowseServices = () => {
   const [isBooking, setIsBooking] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const { toast } = useToast();
   const { userData } = useAuth();
   const { bookService, userStats, refreshUserData } = useUserData();
@@ -49,15 +50,15 @@ const BrowseServices = () => {
   const categories = [
     { id: "all", name: "All Services" },
     { id: "technology", name: "Technology" },
-    { id: "business", name: "Business" },
-    { id: "creative", name: "Creative" },
-    { id: "design", name: "Design" },
     { id: "marketing", name: "Marketing" },
     { id: "consulting", name: "Consulting" },
+    { id: "design", name: "Design" },
+    { id: "entertainment", name: "Entertainment" },
+    { id: "health", name: "Health" },
     { id: "lifestyle", name: "Lifestyle" },
     { id: "travel", name: "Travel" },
-    { id: "health", name: "Health" },
-    { id: "entertainment", name: "Entertainment" },
+    { id: "business", name: "Business" },
+    { id: "creative", name: "Creative" },
     { id: "education", name: "Education" }
   ];
 
@@ -530,32 +531,117 @@ const BrowseServices = () => {
       if (selectedCategory !== 'all') {
         params.append('category', selectedCategory);
       }
-      params.append('status', 'active');
+      params.append('status', 'approved');
       params.append('limit', '50');
 
+      console.log('Fetching services from backend...');
       const response = await api.services.getAll(params);
+      console.log('Services API response:', response);
       
       if (response.success && response.data) {
-        // Ensure response.data is an array before setting
-        const servicesData = Array.isArray(response.data) ? response.data : [];
-        setServices(servicesData as Service[]);
+        let servicesData = [];
+        
+        // Handle different response formats
+        if (Array.isArray(response.data)) {
+          servicesData = response.data;
+        } else if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+          servicesData = Array.isArray(response.data.data) ? response.data.data : [];
+        }
+        
+        // Map backend fields to frontend interface
+        const mappedServices = servicesData.map((service: any) => ({
+          id: service.id,
+          title: service.title,
+          description: service.description,
+          price: parseFloat(service.price || 0),
+          category: service.category,
+          organizationId: service.organization_id,
+          organizationName: service.organization_name || 'ErthaExchange Services',
+          rating: parseFloat(service.rating || 4.5),
+          reviewCount: parseInt(service.review_count || 0),
+          bookingCount: parseInt(service.booking_count || 0),
+          status: service.status,
+          features: Array.isArray(service.features) ? service.features : 
+                   (typeof service.features === 'string' ? JSON.parse(service.features) : []),
+          duration: service.duration,
+          createdAt: service.created_at
+        }));
+
+        console.log(`✅ Loaded ${mappedServices.length} services from backend`);
+        setServices(mappedServices);
+        
+        // Calculate category counts (case-insensitive)
+        const counts: Record<string, number> = { all: mappedServices.length };
+        mappedServices.forEach(service => {
+          const categoryKey = service.category.toLowerCase();
+          counts[categoryKey] = (counts[categoryKey] || 0) + 1;
+        });
+        setCategoryCounts(counts);
+        
+        // If no backend services, show demo data
+        if (mappedServices.length === 0) {
+          console.log('No backend services found, using demo data');
+          const demoServices = getDemoServices();
+          setServices(demoServices);
+          
+          // Calculate demo category counts (case-insensitive)
+          const demoCounts: Record<string, number> = { all: demoServices.length };
+          demoServices.forEach(service => {
+            const categoryKey = service.category.toLowerCase();
+            demoCounts[categoryKey] = (demoCounts[categoryKey] || 0) + 1;
+          });
+          setCategoryCounts(demoCounts);
+        }
       } else {
         console.warn('Invalid response structure, using demo data');
-        setServices(getDemoServices());
+        const demoServices = getDemoServices();
+        setServices(demoServices);
+        
+        // Calculate demo category counts (case-insensitive)
+        const demoCounts: Record<string, number> = { all: demoServices.length };
+        demoServices.forEach(service => {
+          const categoryKey = service.category.toLowerCase();
+          demoCounts[categoryKey] = (demoCounts[categoryKey] || 0) + 1;
+        });
+        setCategoryCounts(demoCounts);
       }
     } catch (error) {
       console.error('Error fetching services:', error);
       // Fallback to demo data
-      setServices(getDemoServices());
+      console.log('API error, using demo data');
+      const demoServices = getDemoServices();
+      setServices(demoServices);
+      
+      // Calculate demo category counts (case-insensitive)
+      const demoCounts: Record<string, number> = { all: demoServices.length };
+      demoServices.forEach(service => {
+        const categoryKey = service.category.toLowerCase();
+        demoCounts[categoryKey] = (demoCounts[categoryKey] || 0) + 1;
+      });
+      setCategoryCounts(demoCounts);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load services on component mount and when filters change
+  // Load services on component mount and when search term changes
   useEffect(() => {
     fetchServices();
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm]);
+
+  // Filter services based on selected category (client-side for better UX)
+  const filteredServices = Array.isArray(services) ? services.filter(service => {
+    const matchesCategory = selectedCategory === 'all' || 
+      service.category.toLowerCase() === selectedCategory.toLowerCase();
+    const matchesSearch = !searchTerm || 
+      service.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (service.organizationName && service.organizationName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (service.tags && service.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())));
+    
+    return matchesCategory && matchesSearch;
+  }) : [];
 
   // Check if user has already booked a service
   const isServiceBooked = (serviceId: string) => {
@@ -571,32 +657,53 @@ const BrowseServices = () => {
     setIsBooking(true);
     
     try {
+      console.log(`Booking service: ${service.title} for ${service.price} coins`);
+      
+      // Check if user has sufficient balance
+      if (walletBalance < service.price) {
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ${service.price - walletBalance} more coins to book this service.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       const success = await bookService({
         id: service.id,
         title: service.title,
         price: service.price,
-        organization: service.organizationName || 'Unknown'
+        organization: service.organizationName || 'ErthaExchange Services',
+        serviceId: service.id,
+        organizationId: service.organizationId
       });
       
       if (success) {
         toast({
-          title: "Service Booked Successfully!",
-          description: `${service.title} has been booked for ${service.price} coins.`,
+          title: "Service Booked Successfully! 🎉",
+          description: `${service.title} has been booked for ${service.price} coins. Check your active services in the dashboard.`,
         });
         setSelectedService(null);
-        // Refresh data
-        await refreshUserData();
+        
+        // Refresh both user data and services to update booking status
+        await Promise.all([
+          refreshUserData(),
+          fetchServices() // Refresh services to show updated booking count
+        ]);
+        
+        console.log(`✅ Successfully booked: ${service.title}`);
       } else {
         toast({
           title: "Booking Failed",
-          description: "Insufficient balance or booking error occurred.",
+          description: "Unable to book the service. Please try again or contact support.",
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Service booking error:', error);
       toast({
         title: "Booking Error",
-        description: "An error occurred while booking the service.",
+        description: error.message || "An unexpected error occurred while booking the service.",
         variant: "destructive",
       });
     } finally {
@@ -691,17 +798,40 @@ const BrowseServices = () => {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
-              <Button
-                key={category.id}
-                variant={selectedCategory === category.id ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory(category.id)}
-                className="transition-all duration-200"
-              >
-                {category.name}
-              </Button>
-            ))}
+            {categories.map((category) => {
+              const count = categoryCounts[category.id.toLowerCase()] || 0;
+              const isSelected = selectedCategory === category.id;
+              
+              return (
+                <Button
+                  key={category.id}
+                  variant={isSelected ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`transition-all duration-200 ${
+                    isSelected 
+                      ? "bg-blue-600 text-white shadow-lg scale-105" 
+                      : "hover:bg-blue-50 hover:border-blue-300"
+                  }`}
+                  disabled={count === 0 && category.id !== 'all'}
+                >
+                  <span className="flex items-center gap-2">
+                    {category.name}
+                    {count > 0 && (
+                      <Badge 
+                        className={`text-xs ${
+                          isSelected 
+                            ? "bg-white text-blue-600" 
+                            : "bg-blue-100 text-blue-800"
+                        }`}
+                      >
+                        {count}
+                      </Badge>
+                    )}
+                  </span>
+                </Button>
+              );
+            })}
           </div>
         </div>
 
@@ -736,9 +866,9 @@ const BrowseServices = () => {
         )}
 
         {/* Services Grid */}
-        {!loading && Array.isArray(services) && services.length > 0 && (
+        {!loading && filteredServices.length > 0 && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map((service) => {
+            {filteredServices.map((service) => {
               const isBooked = isServiceBooked(service.id);
               const insufficientBalance = walletBalance < service.price;
               
@@ -752,15 +882,22 @@ const BrowseServices = () => {
                     />
                     {isBooked && (
                       <div className="absolute top-2 right-2">
-                        <Badge className="bg-green-500 text-white">
-                          Booked
+                        <Badge className="bg-green-500 text-white shadow-lg">
+                          ✅ Purchased
                         </Badge>
                       </div>
                     )}
                     {!isBooked && insufficientBalance && (
                       <div className="absolute top-2 right-2">
-                        <Badge variant="destructive" className="bg-red-500">
-                          Insufficient Balance
+                        <Badge variant="destructive" className="bg-red-500 shadow-lg">
+                          💰 Need More Coins
+                        </Badge>
+                      </div>
+                    )}
+                    {!isBooked && !insufficientBalance && (
+                      <div className="absolute top-2 right-2">
+                        <Badge className="bg-blue-500 text-white shadow-lg">
+                          🛒 Available
                         </Badge>
                       </div>
                     )}
@@ -806,7 +943,7 @@ const BrowseServices = () => {
                                   : ""
                             }
                           >
-                            {isBooked ? "Already Booked" : insufficientBalance ? "Need More Coins" : "Book Now"}
+                            {isBooked ? "✅ Purchased" : insufficientBalance ? "💰 Add Coins" : "🛒 Purchase Service"}
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl">
@@ -918,7 +1055,7 @@ const BrowseServices = () => {
                                         Booking...
                                       </>
                                     ) : (
-                                      "Confirm Booking"
+                                      "🛒 Purchase Service"
                                     )}
                                   </Button>
                                 ) : !isBooked ? (
@@ -934,7 +1071,7 @@ const BrowseServices = () => {
                                     className="flex-1 bg-green-100 text-green-800 cursor-not-allowed"
                                     disabled
                                   >
-                                    Already Booked
+                                    ✅ Already Purchased
                                   </Button>
                                 )}
                               </div>
@@ -951,35 +1088,70 @@ const BrowseServices = () => {
         )}
 
         {/* No services found */}
-        {!loading && (!Array.isArray(services) || services.length === 0) && (
+        {!loading && Array.isArray(services) && services.length > 0 && filteredServices.length === 0 && (
           <div className="text-center py-12">
             <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No services found</h3>
-            <p className="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
-            <Button onClick={() => {setSearchTerm(""); setSelectedCategory("all");}}>
-              Clear Filters
-            </Button>
+            <p className="text-gray-500 mb-4">
+              {selectedCategory !== 'all' && !searchTerm 
+                ? `No services available in the "${categories.find(c => c.id === selectedCategory)?.name}" category`
+                : searchTerm 
+                  ? `No services match your search "${searchTerm}"`
+                  : "Try adjusting your search or filter criteria"
+              }
+            </p>
+            <div className="flex gap-2 justify-center">
+              {searchTerm && (
+                <Button onClick={() => setSearchTerm("")} variant="outline">
+                  Clear Search
+                </Button>
+              )}
+              {selectedCategory !== 'all' && (
+                <Button onClick={() => setSelectedCategory("all")} variant="outline">
+                  Show All Categories
+                </Button>
+              )}
+              <Button onClick={() => {setSearchTerm(""); setSelectedCategory("all");}}>
+                Clear All Filters
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* No services in database */}
+        {!loading && (!Array.isArray(services) || services.length === 0) && (
+          <div className="text-center py-12">
+            <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No services available</h3>
+            <p className="text-gray-500 mb-4">There are currently no services in our database</p>
           </div>
         )}
 
         {/* Service Stats */}
-        {!loading && Array.isArray(services) && services.length > 0 && (
+        {!loading && filteredServices.length > 0 && (
           <div className="mt-12 bg-blue-50 p-6 rounded-lg border border-blue-200">
-            <h3 className="text-lg font-semibold text-blue-900 mb-4">Service Statistics</h3>
+            <h3 className="text-lg font-semibold text-blue-900 mb-4">
+              {selectedCategory === 'all' ? 'All Services' : `${categories.find(c => c.id === selectedCategory)?.name} Services`} Statistics
+            </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
-                <p className="text-2xl font-bold text-blue-600">{services.length}</p>
-                <p className="text-sm text-blue-700">Available Services</p>
+                <p className="text-2xl font-bold text-blue-600">{filteredServices.length}</p>
+                <p className="text-sm text-blue-700">
+                  {selectedCategory === 'all' ? 'Total Services' : 'Services in Category'}
+                </p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-green-600">
-                  {services.reduce((sum, s) => sum + (s.bookingCount || 0), 0)}
+                  {filteredServices.reduce((sum, s) => sum + (s.bookingCount || 0), 0)}
                 </p>
                 <p className="text-sm text-green-700">Total Bookings</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-purple-600">
-                  {Math.round((services.reduce((sum, s) => sum + (s.rating || 0), 0) / services.length) * 10) / 10}
+                  {filteredServices.length > 0 
+                    ? Math.round((filteredServices.reduce((sum, s) => sum + (s.rating || 0), 0) / filteredServices.length) * 10) / 10
+                    : 0
+                  }
                 </p>
                 <p className="text-sm text-purple-700">Average Rating</p>
               </div>
@@ -990,6 +1162,32 @@ const BrowseServices = () => {
                 <p className="text-sm text-orange-700">Your Active Services</p>
               </div>
             </div>
+            
+            {/* Price range for filtered services */}
+            {filteredServices.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center text-sm">
+                  <div>
+                    <p className="font-semibold text-blue-800">Price Range</p>
+                    <p className="text-blue-600">
+                      {Math.min(...filteredServices.map(s => s.price))} - {Math.max(...filteredServices.map(s => s.price))} coins
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-blue-800">Average Price</p>
+                    <p className="text-blue-600">
+                      {Math.round(filteredServices.reduce((sum, s) => sum + s.price, 0) / filteredServices.length)} coins
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-blue-800">Most Affordable</p>
+                    <p className="text-blue-600">
+                      {Math.min(...filteredServices.map(s => s.price))} coins
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

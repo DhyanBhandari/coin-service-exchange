@@ -189,6 +189,14 @@ export const api = {
       apiClient.get('/users/wallet'),
     getUserById: (id: string) => 
       apiClient.get(`/users/${id}`),
+    
+    // User bookings
+    getBookings: (params?: URLSearchParams) => 
+      apiClient.get(`/users/bookings${params ? `?${params.toString()}` : ''}`),
+    getBookingById: (bookingId: string) => 
+      apiClient.get(`/users/bookings/${bookingId}`),
+    cancelBooking: (bookingId: string, data: any) => 
+      apiClient.post(`/users/bookings/${bookingId}/cancel`, data),
   },
 
   // Services
@@ -280,6 +288,12 @@ export const api = {
       apiClient.get('/transactions/stats'),
     getHistory: (params?: URLSearchParams) => 
       apiClient.get(`/transactions/history${params ? `?${params.toString()}` : ''}`),
+    create: (data: any) => 
+      apiClient.post('/transactions', data),
+    update: (id: string, data: any) => 
+      apiClient.put(`/transactions/${id}`, data),
+    delete: (id: string) => 
+      apiClient.delete(`/transactions/${id}`),
   },
 
   // Conversions (for organizations)

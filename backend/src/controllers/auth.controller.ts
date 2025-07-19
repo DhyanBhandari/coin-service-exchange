@@ -85,7 +85,7 @@ export const firebaseRegister = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Firebase register error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Registration failed')
+      createApiResponse(false, 'Registration failed')
     );
   }
 };
@@ -99,7 +99,7 @@ export const firebaseLogin = async (req: AuthRequest, res: Response) => {
     // Verify that the Firebase UID matches
     if (firebaseUser.uid !== uid) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Firebase UID mismatch')
+        createApiResponse(false, 'Firebase UID mismatch')
       );
     }
 
@@ -114,7 +114,7 @@ export const firebaseLogin = async (req: AuthRequest, res: Response) => {
 
     if (userResult.length === 0) {
       return res.status(404).json(
-        createApiResponse(false, null, 'User not found')
+        createApiResponse(false, 'User not found')
       );
     }
 
@@ -123,7 +123,7 @@ export const firebaseLogin = async (req: AuthRequest, res: Response) => {
     // Check if user account is active
     if (!user.isActive) {
       return res.status(403).json(
-        createApiResponse(false, null, 'Account is suspended')
+        createApiResponse(false, 'Account is suspended')
       );
     }
 
@@ -167,7 +167,7 @@ export const firebaseLogin = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Firebase login error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Login failed')
+      createApiResponse(false,   'Login failed')
     );
   }
 };
@@ -179,7 +179,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
     if (!userId) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Authentication required')
+        createApiResponse(false, 'Authentication required')
       );
     }
 
@@ -194,7 +194,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
     if (userResult.length === 0) {
       return res.status(404).json(
-        createApiResponse(false, null, 'User not found')
+        createApiResponse(false, 'User not found')
       );
     }
 
@@ -203,7 +203,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     // Check if user account is active
     if (!user.isActive) {
       return res.status(403).json(
-        createApiResponse(false, null, 'Account is suspended')
+        createApiResponse(false, 'Account is suspended')
       );
     }
 
@@ -215,7 +215,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Get profile error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Failed to retrieve profile')
+      createApiResponse(false, 'Failed to retrieve profile')
     );
   }
 };
@@ -228,7 +228,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
     if (!userId) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Authentication required')
+        createApiResponse(false,   'Authentication required')
       );
     }
 
@@ -243,7 +243,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
     if (userResult.length === 0) {
       return res.status(404).json(
-        createApiResponse(false, null, 'User not found')
+        createApiResponse(false,   'User not found')
       );
     }
 
@@ -252,7 +252,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     // Check if user account is active
     if (!user.isActive) {
       return res.status(403).json(
-        createApiResponse(false, null, 'Account is suspended')
+        createApiResponse(false,   'Account is suspended')
       );
     }
 
@@ -297,7 +297,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('Update profile error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Failed to update profile')
+      createApiResponse(false,   'Failed to update profile')
     );
   }
 };
@@ -310,7 +310,7 @@ export const register = async (req: Request, res: Response) => {
     // Basic validation
     if (!email || !password || !name) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Email, password, and name are required')
+        createApiResponse(false,   'Email, password, and name are required')
       );
     }
 
@@ -325,7 +325,7 @@ export const register = async (req: Request, res: Response) => {
 
     if (existingUser.length > 0) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Email already registered')
+        createApiResponse(false,   'Email already registered')
       );
     }
 
@@ -369,12 +369,12 @@ export const register = async (req: Request, res: Response) => {
     }
 
     res.status(201).json(
-      createApiResponse(true, { user: sanitizedUser, token }, 'User registered successfully')
+      createApiResponse(true, 'User registered successfully', { user: sanitizedUser, token })
     );
   } catch (error: any) {
     console.error('Register error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Registration failed')
+      createApiResponse(false,   'Registration failed')
     );
   }
 };
@@ -387,7 +387,7 @@ export const login = async (req: Request, res: Response) => {
     // Basic validation
     if (!email || !password) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Email and password are required')
+        createApiResponse(false,   'Email and password are required')
       );
     }
 
@@ -402,7 +402,7 @@ export const login = async (req: Request, res: Response) => {
 
     if (userResult.length === 0) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Invalid credentials')
+        createApiResponse(false,   'Invalid credentials')
       );
     }
 
@@ -411,14 +411,14 @@ export const login = async (req: Request, res: Response) => {
     // Check if user account is active
     if (!user.isActive) {
       return res.status(403).json(
-        createApiResponse(false, null, 'Account is suspended')
+        createApiResponse(false,   'Account is suspended')
       );
     }
 
     // Check if user has a password (Firebase users might not have one)
     if (!user.passwordHash) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Invalid credentials')
+        createApiResponse(false,   'Invalid credentials')
       );
     }
 
@@ -427,7 +427,7 @@ export const login = async (req: Request, res: Response) => {
 
     if (!isPasswordValid) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Invalid credentials')
+        createApiResponse(false,   'Invalid credentials')
       );
     }
 
@@ -468,12 +468,12 @@ export const login = async (req: Request, res: Response) => {
     }
 
     res.json(
-      createApiResponse(true, { user: sanitizedUser, token }, 'Login successful')
+      createApiResponse(true, 'Login successful', { user: sanitizedUser, token })
     );
   } catch (error: any) {
     console.error('Login error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Login failed')
+      createApiResponse(false,   'Login failed')
     );
   }
 };
@@ -486,13 +486,13 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
 
     if (!userId) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Authentication required')
+        createApiResponse(false,   'Authentication required')
       );
     }
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Current password and new password are required')
+        createApiResponse(false,   'Current password and new password are required')
       );
     }
 
@@ -507,7 +507,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
 
     if (userResult.length === 0) {
       return res.status(404).json(
-        createApiResponse(false, null, 'User not found')
+        createApiResponse(false,   'User not found')
       );
     }
 
@@ -516,14 +516,14 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     // Check if user account is active
     if (!user.isActive) {
       return res.status(403).json(
-        createApiResponse(false, null, 'Account is suspended')
+        createApiResponse(false,   'Account is suspended')
       );
     }
 
     // Check if user has a password (Firebase users might not have one)
     if (!user.passwordHash) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Password change not available for this account')
+        createApiResponse(false,   'Password change not available for this account')
       );
     }
 
@@ -532,7 +532,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
 
     if (!isCurrentPasswordValid) {
       return res.status(401).json(
-        createApiResponse(false, null, 'Current password is incorrect')
+        createApiResponse(false,   'Current password is incorrect')
       );
     }
 
@@ -559,12 +559,12 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     }
 
     res.json(
-      createApiResponse(true, null, 'Password changed successfully')
+      createApiResponse(true,   'Password changed successfully')
     );
   } catch (error: any) {
     console.error('Change password error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Failed to change password')
+      createApiResponse(false,   'Failed to change password')
     );
   }
 };
@@ -576,7 +576,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
     if (!email) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Email is required')
+        createApiResponse(false,   'Email is required')
       );
     }
 
@@ -594,7 +594,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
     if (userResult.length === 0) {
       return res.json(
-        createApiResponse(true, null, successMessage)
+        createApiResponse(true,   successMessage)
       );
     }
 
@@ -603,7 +603,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
     // Don't send reset email for Firebase users
     if (user.firebaseUid) {
       return res.json(
-        createApiResponse(true, null, successMessage)
+        createApiResponse(true,   successMessage)
       );
     }
 
@@ -627,12 +627,12 @@ await db
     console.log(`Password reset token for ${email}: ${resetToken}`);
 
     res.json(
-      createApiResponse(true, null, successMessage)
+      createApiResponse(true,   successMessage)
     );
   } catch (error: any) {
     console.error('Forgot password error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Failed to process password reset request')
+      createApiResponse(false,   'Failed to process password reset request')
     );
   }
 };
@@ -644,7 +644,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     if (!token || !newPassword) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Token and new password are required')
+        createApiResponse(false,   'Token and new password are required')
       );
     }
 
@@ -663,7 +663,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     if (tokenResult.length === 0) {
       return res.status(400).json(
-        createApiResponse(false, null, 'Invalid or expired reset token')
+        createApiResponse(false,   'Invalid or expired reset token')
       );
     }
 
@@ -678,7 +678,7 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     if (userResult.length === 0) {
       return res.status(404).json(
-        createApiResponse(false, null, 'User not found')
+        createApiResponse(false,   'User not found')
       );
     }
 
@@ -715,12 +715,12 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 
     res.json(
-      createApiResponse(true, null, 'Password reset successfully')
+      createApiResponse(true,   'Password reset successfully')
     );
   } catch (error: any) {
     console.error('Reset password error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Failed to reset password')
+      createApiResponse(false,   'Failed to reset password')
     );
   }
 };
@@ -741,12 +741,12 @@ export const logout = async (req: AuthRequest, res: Response) => {
     }
 
     res.json(
-      createApiResponse(true, null, 'Logged out successfully')
+      createApiResponse(true,   'Logged out successfully')
     );
   } catch (error: any) {
     console.error('Logout error:', error);
     res.status(500).json(
-      createApiResponse(false, null, 'Logout failed')
+      createApiResponse(false,   'Logout failed')
     );
   }
 };

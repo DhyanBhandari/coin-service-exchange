@@ -34,17 +34,28 @@ export const testSupabaseConnection = async () => {
       setTimeout(() => reject(new Error('Supabase connection timeout')), 10000)
     );
     
-    const connectionPromise = supabase.from('users').select('count').limit(1);
+    // Test with storage API which is more reliable for connection testing
+    const connectionPromise = supabase.storage.listBuckets();
     
     const { data, error } = await Promise.race([connectionPromise, timeoutPromise]) as { data: any, error: any };
     
-    if (error) throw error;
+    if (error) {
+      // If storage fails, try with services table as fallback
+      const servicesTest = await supabase.from('services').select('count').limit(1);
+      if (servicesTest.error) {
+        throw servicesTest.error;
+      }
+    }
+    
     logger.info('Supabase connected successfully');
     return true;
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('timeout')) {
         logger.warn('Supabase connection timeout - continuing with limited functionality');
+      } else if (error.message.includes('permission denied')) {
+        logger.warn('Supabase permissions issue - storage may be limited');
+        return true; // Connection works, just permissions are limited
       } else {
         logger.error('Supabase connection failed:', error.message);
       }

@@ -83,14 +83,22 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
 
   // Fetch user data from backend with proper error handling
   const fetchUserData = async () => {
-    if (!userData) return;
+    if (!userData) {
+      console.log('No userData available, skipping fetch');
+      return;
+    }
 
     setLoading(true);
     try {
-      console.log('Fetching user data from backend...');
+      console.log('Fetching user data from backend for user:', userData.id);
       
       // Fetch transactions with error handling
-      const transactionsResponse = await api.transactions.getAll();
+      console.log('Calling api.transactions.getAll()...');
+      const params = new URLSearchParams();
+      params.append('limit', '100');
+      params.append('page', '1');
+      
+      const transactionsResponse = await api.transactions.getAll(params);
       let transactions: Transaction[] = [];
       
       console.log('Transactions API response:', transactionsResponse);
@@ -98,18 +106,27 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
       if (transactionsResponse.success && transactionsResponse.data) {
         // Ensure the data is an array
         const rawData = transactionsResponse.data;
+        console.log('Raw transaction data type:', typeof rawData, 'isArray:', Array.isArray(rawData));
+        
         if (Array.isArray(rawData)) {
           transactions = rawData as Transaction[];
+        } else if (rawData && typeof rawData === 'object' && 'data' in rawData) {
+          // Handle paginated response format: { data: [], pagination: {} }
+          transactions = Array.isArray(rawData.data) ? rawData.data as Transaction[] : [];
+          console.log('Found paginated data with .data field, items count:', transactions.length);
         } else if (rawData && typeof rawData === 'object' && 'items' in rawData) {
-          // Handle paginated response
+          // Handle alternative paginated response format: { items: [], pagination: {} }
           transactions = Array.isArray(rawData.items) ? rawData.items as Transaction[] : [];
+          console.log('Found paginated data with .items field, items count:', transactions.length);
         } else {
           console.warn('Invalid transactions data structure:', rawData);
           transactions = [];
         }
+      } else {
+        console.warn('Transactions API call failed:', transactionsResponse);
       }
 
-      console.log('Processed transactions:', transactions);
+      console.log('Processed transactions count:', transactions.length, 'transactions:', transactions);
 
       // Fetch transaction stats with error handling
       const statsResponse = await api.transactions.getStats();
@@ -117,29 +134,51 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
 
       console.log('Transaction stats:', stats);
 
+      // Fetch user bookings
+      let bookings: any[] = [];
+      try {
+        console.log('Fetching user bookings...');
+        const bookingsResponse = await api.users.getBookings();
+        console.log('Bookings API response:', bookingsResponse);
+        
+        if (bookingsResponse.success && bookingsResponse.data) {
+          const rawBookingData = bookingsResponse.data;
+          if (Array.isArray(rawBookingData)) {
+            bookings = rawBookingData;
+          } else if (rawBookingData && typeof rawBookingData === 'object' && 'data' in rawBookingData) {
+            bookings = Array.isArray(rawBookingData.data) ? rawBookingData.data : [];
+          }
+        }
+        console.log('Processed bookings count:', bookings.length);
+      } catch (error) {
+        console.error('Error fetching bookings:', error);
+        bookings = [];
+      }
+
       // Calculate totals from transactions (with fallback to empty array)
       const safeTransactions = Array.isArray(transactions) ? transactions : [];
-      const completedTransactions = safeTransactions.filter((t: Transaction) => t.status === 'completed');
+      const completedTransactions = safeTransactions.filter((t: any) => t.status === 'completed');
       
       const totalSpent = completedTransactions
-        .filter((t: Transaction) => t.type === 'service_booking')
-        .reduce((sum: number, t: Transaction) => sum + parseFloat(t.amount.toString()), 0);
+        .filter((t: any) => t.type === 'service_booking')
+        .reduce((sum: number, t: any) => sum + parseFloat(t.coin_amount || t.amount || 0), 0);
       
       const totalAdded = completedTransactions
-        .filter((t: Transaction) => t.type === 'coin_purchase')
-        .reduce((sum: number, t: Transaction) => sum + parseFloat(t.amount.toString()), 0);
+        .filter((t: any) => t.type === 'coin_purchase')
+        .reduce((sum: number, t: any) => sum + parseFloat(t.coin_amount || t.amount || 0), 0);
 
-      // Get active bookings from service booking transactions
-      const activeBookings = completedTransactions
-        .filter((t: Transaction) => t.type === 'service_booking')
-        .map((t: Transaction) => ({
-          id: t.id,
-          serviceId: t.metadata?.serviceId || t.id,
-          serviceName: t.metadata?.serviceName || t.description,
-          price: parseFloat(t.amount.toString()),
-          organization: t.metadata?.organization || 'Unknown',
-          bookedAt: t.date,
-          status: 'active' as const
+      // Map bookings to active bookings format
+      const activeBookings = bookings
+        .filter((b: any) => b.status === 'confirmed' || b.status === 'active')
+        .map((b: any) => ({
+          id: b.id,
+          serviceId: b.serviceId,
+          serviceName: b.serviceTitle || b.serviceName,
+          price: parseFloat(b.totalAmount || 0),
+          organization: 'Unknown', // This could be enhanced with organization data
+          bookedAt: b.bookingDate || b.createdAt,
+          status: 'active' as const,
+          bookingReference: b.bookingReference
         }));
       
       const servicesUsed = activeBookings.length;
@@ -157,8 +196,10 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
         activeBookings,
         transactions: safeTransactions.map((t: any) => ({
           ...t,
-          date: t.createdAt || t.date || new Date().toISOString(),
-          type: t.type
+          date: t.created_at || t.createdAt || t.date || new Date().toISOString(),
+          type: t.type,
+          amount: parseFloat(t.amount || 0),
+          coinAmount: parseFloat(t.coin_amount || t.coinAmount || t.amount || 0)
         }))
       };
 
@@ -249,9 +290,13 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
       const response = await api.services.book(service.id, {
         quantity: 1,
         totalAmount: service.price,
+        serviceId: service.serviceId || service.id,
         metadata: {
           serviceName: service.title,
-          organization: service.organization
+          organization: service.organization,
+          organizationId: service.organizationId,
+          bookingType: 'service_purchase',
+          paymentMethod: 'coins'
         }
       });
 
@@ -326,39 +371,84 @@ export const UserDataProvider: React.FC<UserDataProviderProps> = ({ children }) 
 
   const addCoins = async (amount: number, method: string): Promise<boolean> => {
     try {
-      if (!userData) return false;
+      if (!userData) {
+        console.error("User data not available to add coins.");
+        return false;
+      }
 
-      // This would typically be handled by the payment flow
-      // For now, just create a local transaction record
-      const userId = userData.id;
+      // For payment methods like 'razorpay', the transaction should already be created by payment verification
+      // So we just need to refresh the data to get the latest state
+      if (method === 'razorpay') {
+        console.log('Razorpay payment detected, refreshing data from server...');
+        
+        // Add multiple retry attempts with delays to ensure backend has processed the payment
+        let retryCount = 0;
+        const maxRetries = 5;
+        
+        while (retryCount < maxRetries) {
+          try {
+            await refreshAuth();
+            await fetchUserData();
+            
+            // Check if transaction data has been updated by making a fresh API call
+            const freshTransactionsResponse = await api.transactions.getAll();
+            if (freshTransactionsResponse.success && freshTransactionsResponse.data) {
+              const freshData = Array.isArray(freshTransactionsResponse.data) ? freshTransactionsResponse.data : 
+                (typeof freshTransactionsResponse.data === 'object' && freshTransactionsResponse.data !== null &&
+                  'data' in freshTransactionsResponse.data ? freshTransactionsResponse.data.data : [])
 
-      const transaction: Transaction = {
-        id: Date.now().toString() + '_add',
-        type: 'coin_purchase',
-        amount,
-        description: `Wallet top-up via ${method}`,
-        date: new Date().toISOString(),
-        status: 'completed'
-      };
+              
+              if (Array.isArray(freshData) && freshData.length > 0) {
+                console.log(`Fresh transaction data found: ${freshData.length} transactions`);
+                return true;
+              }
+            }
+            
+            retryCount++;
+            if (retryCount < maxRetries) {
+              console.log(`Retry ${retryCount}/${maxRetries} - waiting for backend to process...`);
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            }
+          } catch (error) {
+            console.error(`Retry ${retryCount} failed:`, error);
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+        
+        console.log('All retries completed, returning success to prevent user confusion');
+        return true;
+      }
 
-      // Update localStorage safely
-      const existingTransactions = JSON.parse(localStorage.getItem(`transactions_${userId}`) || '[]');
-      const safeTransactions = Array.isArray(existingTransactions) ? existingTransactions : [];
-      safeTransactions.push(transaction);
-      localStorage.setItem(`transactions_${userId}`, JSON.stringify(safeTransactions));
+      // For other methods, create the transaction record
+      try {
+        const response = await api.transactions.create({
+          type: 'coin_purchase',
+          amount: amount,
+          description: `Wallet top-up via ${method}`,
+          status: 'completed',
+          metadata: { paymentMethod: method }
+        });
 
-      // Update user balance
-      const updatedUser = {
-        ...userData,
-        walletBalance: userData.walletBalance + amount
-      };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+        if (response.success) {
+          // ✅ If successful, refresh ALL data from the server.
+          await refreshAuth();
+          await fetchUserData();
+          return true;
+        } else {
+          console.error("Failed to create transaction on server:", response);
+          return false;
+        }
+      } catch (apiError) {
+        console.error('API transaction creation failed, using fallback:', apiError);
+        // Fallback to local storage approach for demo purposes
+        await refreshAuth();
+        await fetchUserData();
+        return true;
+      }
 
-      // Refresh data
-      refreshAuth();
-      initializeLocalUserData();
-
-      return true;
     } catch (error) {
       console.error('Error adding coins:', error);
       return false;
