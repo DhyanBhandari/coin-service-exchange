@@ -1,6 +1,7 @@
 import { getDb } from '../config/database';
 import { users, passwordResetTokens } from '../models/schema';
 import { eq, and, gt } from 'drizzle-orm';
+import crypto from 'crypto';
 import {
   hashPassword,
   comparePassword,
@@ -10,7 +11,7 @@ import {
   generatePasswordResetToken
 } from '../utils/helpers';
 import { User, NewUser, NewPasswordResetToken } from '../models/schema';
-import { USER_ROLES, USER_STATUS } from '../utils/constants';
+import { USER_ROLES } from '../utils/constants';
 import { AuditService } from './audit.service';
 import { logger } from '../utils/logger';
 
@@ -48,9 +49,9 @@ export class AuthService {
       const newUserData: NewUser = {
         name: userData.name,
         email: userData.email,
-        password: hashedPassword,
+        passwordHash: hashedPassword, // Use passwordHash instead of password
         role: userData.role || USER_ROLES.USER,
-        status: USER_STATUS.ACTIVE,
+        isActive: true, // Use isActive instead of status
         walletBalance: '0',
         emailVerified: false
       };
@@ -115,14 +116,14 @@ export class AuthService {
       }
 
       // Check password
-      const isPasswordValid = await comparePassword(password, user.password);
+      const isPasswordValid = await comparePassword(password, user.passwordHash || '');
       if (!isPasswordValid) {
         throw createError('Invalid credentials', 401);
       }
 
       // Check user status
-      if (user.status !== USER_STATUS.ACTIVE) {
-        throw createError(`Account is ${user.status}`, 403);
+      if (!user.isActive) { // Use isActive instead of status
+        throw createError('Account is suspended', 403);
       }
 
       // Update last login
@@ -165,7 +166,7 @@ export class AuthService {
     }
   }
 
-  async getUserById(id: string): Promise<User | null> {
+  async getUserById(id: string): Promise<User | undefined> {
     try {
       const db = getDb();
       const [user] = await db
@@ -174,14 +175,14 @@ export class AuthService {
         .where(eq(users.id, id))
         .limit(1);
 
-      return user ? sanitizeUser(user) as User : null;
+      return user ? sanitizeUser(user) as User : undefined;
     } catch (error) {
       logger.error('Get user by ID error:', error);
       throw error;
     }
   }
 
-  async getUserByEmail(email: string): Promise<User | null> {
+  async getUserByEmail(email: string): Promise<User | undefined> {
     try {
       const db = getDb();
       const [user] = await db
@@ -190,7 +191,7 @@ export class AuthService {
         .where(eq(users.email, email))
         .limit(1);
 
-      return user ? sanitizeUser(user) as User : null;
+      return user ? sanitizeUser(user) as User : undefined;
     } catch (error) {
       logger.error('Get user by email error:', error);
       throw error;
@@ -219,7 +220,7 @@ export class AuthService {
       }
 
       // Verify current password
-      const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
+      const isCurrentPasswordValid = await comparePassword(currentPassword, user.passwordHash || '');
       if (!isCurrentPasswordValid) {
         throw createError('Current password is incorrect', 400);
       }
@@ -231,7 +232,7 @@ export class AuthService {
       await db
         .update(users)
         .set({
-          password: hashedNewPassword,
+          passwordHash: hashedNewPassword, // Use passwordHash instead of password
           updatedAt: new Date()
         })
         .where(eq(users.id, userId));
@@ -317,12 +318,12 @@ export class AuthService {
 
       if (!user) {
         // Don't reveal if email exists or not for security
-        return { message: 'If the email exists, a password reset link has been sent.' };
+        return { message: 'If an account with that email exists, a password reset link has been sent.' };
       }
 
       // Check user status
-      if (user.status !== USER_STATUS.ACTIVE) {
-        throw createError(`Account is ${user.status}`, 403);
+      if (!user.isActive) { // Use isActive instead of status
+        throw createError('Account is suspended', 403);
       }
 
       // Generate reset token
@@ -342,6 +343,7 @@ export class AuthService {
       const newTokenData: NewPasswordResetToken = {
         userId: user.id,
         token: resetToken,
+        tokenHash: crypto.createHash('sha256').update(resetToken).digest('hex'),
         expiresAt,
         isUsed: false
       };
@@ -365,7 +367,7 @@ export class AuthService {
       // For now, we'll just log it (in production, you'd send an email)
       logger.info(`Password reset token for ${user.email}: ${resetToken}`);
 
-      return { message: 'If the email exists, a password reset link has been sent.' };
+      return { message: 'If an account with that email exists, a password reset link has been sent.' };
     } catch (error) {
       logger.error('Forgot password error:', error);
       throw error;
@@ -403,8 +405,8 @@ export class AuthService {
       }
 
       // Check user status
-      if (user.status !== USER_STATUS.ACTIVE) {
-        throw createError(`Account is ${user.status}`, 403);
+      if (!user.isActive) { // Use isActive instead of status
+        throw createError('Account is suspended', 403);
       }
 
       // Hash new password
@@ -414,7 +416,7 @@ export class AuthService {
       await db
         .update(users)
         .set({
-          password: hashedNewPassword,
+          passwordHash: hashedNewPassword, // Use passwordHash instead of password
           updatedAt: new Date()
         })
         .where(eq(users.id, user.id));

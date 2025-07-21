@@ -2,6 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { createApiResponse } from '@/utils/helpers';
 
+// Extended Request interface for file uploads
+interface RequestWithFile extends Request {
+  file?: Express.Multer.File;
+  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
+}
+
 export const validateBody = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { error, value } = schema.validate(req.body, {
@@ -14,11 +20,9 @@ export const validateBody = (schema: Joi.ObjectSchema) => {
       const errorMessage: string = error.details
         .map(detail => detail.message)
         .join(', ');
-      
+
       res.status(400).json(
-      createApiResponse(false, { error: errorMessage }, 'Validation error')
-
-
+        createApiResponse(false, { error: errorMessage }, 'Validation error')
       );
       return;
     }
@@ -40,9 +44,9 @@ export const validateQuery = (schema: Joi.ObjectSchema) => {
       const errorMessage = error.details
         .map(detail => detail.message)
         .join(', ');
-      
+
       res.status(400).json(
-        createApiResponse(false,  { error: errorMessage },'Query validation error')
+        createApiResponse(false, { error: errorMessage }, 'Query validation error')
       );
       return;
     }
@@ -63,7 +67,7 @@ export const validateParams = (schema: Joi.ObjectSchema) => {
       const errorMessage = error.details
         .map(detail => detail.message)
         .join(', ');
-      
+
       res.status(400).json(
         createApiResponse(false, { error: errorMessage }, 'Parameter validation error')
       );
@@ -80,9 +84,9 @@ export const validateFile = (options: {
   maxSize?: number;
   allowedTypes?: string[];
 }) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: RequestWithFile, res: Response, next: NextFunction): void => {
     const file = req.file;
-    
+
     if (options.required && !file) {
       res.status(400).json(
         createApiResponse(false, 'File is required')
