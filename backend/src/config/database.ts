@@ -1,42 +1,50 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../models/schema';
-import { logger } from '../utils/logger';
 
 // Make these variables mutable, as they will be assigned later
 let client: postgres.Sql | undefined;
 let db: ReturnType<typeof drizzle> | undefined;
 
 export function initializeDatabase() {
-    // Only access process.env.DATABASE_URL *inside* this function
-    const rawConnectionString = process.env.DATABASE_URL;
+    try {
+        // Only access process.env.DATABASE_URL *inside* this function
+        const rawConnectionString = process.env.DATABASE_URL;
 
-    if (!rawConnectionString) {
-        throw new Error('DATABASE_URL is not set');
-    }
+        if (!rawConnectionString) {
+            console.warn('DATABASE_URL is not set - database not initialized');
+            return;
+        }
 
-    // Clean up the connection string - remove any duplicate DATABASE_URL= prefix
-    let connectionString = rawConnectionString.trim();
-    
-    // Handle case where DATABASE_URL appears twice (DATABASE_URL=DATABASE_URL=...)
-    if (connectionString.startsWith('DATABASE_URL=DATABASE_URL=')) {
-        connectionString = connectionString.substring('DATABASE_URL=DATABASE_URL='.length);
-    } else if (connectionString.startsWith('DATABASE_URL=')) {
-        connectionString = connectionString.substring('DATABASE_URL='.length);
-    }
+        // Clean up the connection string - remove any duplicate DATABASE_URL= prefix
+        let connectionString = rawConnectionString.trim();
 
-    if (!client) { // Prevent re-initializing if already done
-        client = postgres(connectionString, {
-            max: 5,
-            idle_timeout: 10,
-            connect_timeout: 5, // Reduced timeout for faster failure detection
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-        });
+        // Handle case where DATABASE_URL appears twice (DATABASE_URL=DATABASE_URL=...)
+        if (connectionString.startsWith('DATABASE_URL=DATABASE_URL=')) {
+            connectionString = connectionString.substring('DATABASE_URL=DATABASE_URL='.length);
+        } else if (connectionString.startsWith('DATABASE_URL=')) {
+            connectionString = connectionString.substring('DATABASE_URL='.length);
+        }
 
-        db = drizzle(client, {
-            schema,
-            logger: process.env.NODE_ENV === 'development'
-        });
+        if (!client) { // Prevent re-initializing if already done
+            client = postgres(connectionString, {
+                max: 3, // Reduced for serverless
+                idle_timeout: 10,
+                connect_timeout: 10,
+                ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+                prepare: false, // Important for serverless
+            });
+
+            db = drizzle(client, {
+                schema,
+                logger: process.env.NODE_ENV === 'development'
+            });
+
+            console.log('Database initialized successfully');
+        }
+    } catch (error) {
+        console.error('Database initialization failed:', error);
+        // Don't throw - let the app start without database
     }
 }
 
@@ -50,7 +58,7 @@ export const getDb = () => {
                 throw new Error('Database initialization failed');
             }
         } catch (error) {
-            logger.error('Failed to initialize database on demand:', error);
+            console.error('Failed to initialize database on demand:', error);
             throw new Error('Database connection unavailable. Please check your configuration.');
         }
     }
@@ -66,7 +74,7 @@ export const getClient = () => {
                 throw new Error('Database client initialization failed');
             }
         } catch (error) {
-            logger.error('Failed to initialize database client on demand:', error);
+            console.error('Failed to initialize database client on demand:', error);
             throw new Error('Database connection unavailable. Please check your configuration.');
         }
     }
@@ -76,41 +84,37 @@ export const getClient = () => {
 // Export db directly for easier imports
 export { db };
 
-// Test connection function
+// Test connection function with better error handling
 export const testConnection = async () => {
     try {
+        if (!process.env.DATABASE_URL) {
+            console.warn('DATABASE_URL not configured');
+            return false;
+        }
+
         // Create a separate client just for testing with a very short timeout
-        const testClient = postgres(process.env.DATABASE_URL || '', {
+        const testClient = postgres(process.env.DATABASE_URL, {
             max: 1,
             idle_timeout: 5,
-            connect_timeout: 3, // Very short timeout just for testing
+            connect_timeout: 5,
             ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            prepare: false,
         });
 
         // Execute a simple query with a timeout
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Connection test timeout')), 5000)
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection test timeout')), 8000)
         );
-        
+
         await Promise.race([testClient`SELECT 1`, timeoutPromise]);
-        
+
         // Close the test client
         await testClient.end();
-        
-        logger.info('Database connected successfully');
+
+        console.log('Database connected successfully');
         return true;
-    } catch (error) {
-        // More detailed error logging
-        if (error instanceof Error) {
-            logger.error(`Database connection failed: ${error.message}`);
-            if (error.stack) {
-                logger.debug(error.stack);
-            }
-        } else {
-            logger.error('Database connection failed with unknown error');
-        }
-        
-        // Return false but don't crash the application
+    } catch (error: any) {
+        console.error(`Database connection failed: ${error.message}`);
         return false;
     }
 };
