@@ -25,14 +25,14 @@ export class ConversionService {
   ): Promise<ConversionRequest> {
     try {
       const db = getDb();
-      
+
       // Check if organization has sufficient balance
       const user = await this.userService.getUserById(organizationId);
       if (!user) {
         throw createError('Organization not found', 404);
       }
 
-      const currentBalance = parseFloat(user.walletBalance);
+      const currentBalance = parseFloat(user.walletBalance || '0'); // Fix null issue
       if (currentBalance < amount) {
         throw createError('Insufficient wallet balance', 400);
       }
@@ -74,7 +74,7 @@ export class ConversionService {
   ): Promise<PaginatedResponse<ConversionRequest>> {
     try {
       const db = getDb();
-      
+
       const whereClause = organizationId ? eq(conversionRequests.organizationId, organizationId) : undefined;
 
       // Get total count
@@ -82,7 +82,7 @@ export class ConversionService {
         .select({ count: sql<number>`count(*)` })
         .from(conversionRequests)
         .where(whereClause);
-      
+
       const total = countResult[0]?.count || 0;
 
       // Apply pagination
@@ -112,7 +112,7 @@ export class ConversionService {
   ): Promise<ConversionRequest> {
     try {
       const db = getDb();
-      
+
       const [request] = await db
         .select()
         .from(conversionRequests)
@@ -144,10 +144,9 @@ export class ConversionService {
       const amount = parseFloat(request.amount);
       await this.userService.updateWalletBalance(
         request.organizationId,
-        amount.toString(),
+        amount, // Pass as number, not string
         'subtract'
       );
-
 
       // Log audit
       await this.auditService.log({
@@ -175,7 +174,7 @@ export class ConversionService {
   ): Promise<ConversionRequest> {
     try {
       const db = getDb();
-      
+
       const [request] = await db
         .select()
         .from(conversionRequests)
@@ -222,17 +221,17 @@ export class ConversionService {
     }
   }
 
-  async getConversionRequestById(id: string): Promise<ConversionRequest | null> {
+  async getConversionRequestById(id: string): Promise<ConversionRequest | undefined> {
     try {
       const db = getDb();
-      
+
       const [request] = await db
         .select()
         .from(conversionRequests)
         .where(eq(conversionRequests.id, id))
         .limit(1);
 
-      return request || null;
+      return request || undefined;
     } catch (error) {
       logger.error('Get conversion request by ID error:', error);
       throw error;

@@ -23,7 +23,7 @@ export class ServiceService {
   ): Promise<Service> {
     try {
       const db = getDb();
-      
+
       const [newService] = await db
         .insert(services)
         .values({
@@ -58,7 +58,7 @@ export class ServiceService {
   ): Promise<PaginatedResponse<Service>> {
     try {
       const db = getDb();
-      
+
       // Build where conditions
       const conditions = [];
 
@@ -96,17 +96,17 @@ export class ServiceService {
         .select({ count: sql<number>`count(*)` })
         .from(services)
         .where(whereClause);
-      
+
       const total = countResult[0]?.count || 0;
 
       // Apply pagination and sorting
       const offset = (pagination.page - 1) * pagination.limit;
       const orderColumn = pagination.sortBy === 'price' ? services.price :
-                         pagination.sortBy === 'rating' ? services.rating :
-                         services.createdAt;
-      
+        pagination.sortBy === 'rating' ? services.rating :
+          services.createdAt;
+
       const orderDirection = pagination.sortOrder === 'desc' ? desc : asc;
-      
+
       // Get data with filters and pagination
       const data = await db
         .select()
@@ -126,17 +126,17 @@ export class ServiceService {
     }
   }
 
-  async getServiceById(id: string): Promise<Service | null> {
+  async getServiceById(id: string): Promise<Service | undefined> {
     try {
       const db = getDb();
-      
+
       const [service] = await db
         .select()
         .from(services)
         .where(eq(services.id, id))
         .limit(1);
 
-      return service || null;
+      return service || undefined;
     } catch (error) {
       logger.error('Get service by ID error:', error);
       throw error;
@@ -152,7 +152,7 @@ export class ServiceService {
   ): Promise<Service> {
     try {
       const db = getDb();
-      
+
       const [existingService] = await db
         .select()
         .from(services)
@@ -200,7 +200,7 @@ export class ServiceService {
   ): Promise<void> {
     try {
       const db = getDb();
-      
+
       const [existingService] = await db
         .select()
         .from(services)
@@ -239,7 +239,7 @@ export class ServiceService {
   ): Promise<Service> {
     try {
       const db = getDb();
-      
+
       const [service] = await db
         .select()
         .from(services)
@@ -287,7 +287,7 @@ export class ServiceService {
   ): Promise<ServiceReview> {
     try {
       const db = getDb();
-      
+
       // Check if service exists
       const [service] = await db
         .select()
@@ -338,7 +338,7 @@ export class ServiceService {
   private async updateServiceRating(serviceId: string): Promise<void> {
     try {
       const db = getDb();
-      
+
       const reviews = await db
         .select()
         .from(serviceReviews)
@@ -368,11 +368,12 @@ export class ServiceService {
   async incrementBookings(serviceId: string): Promise<void> {
     try {
       const db = getDb();
-      
+
+      // Use bookingCount instead of bookings
       await db
         .update(services)
         .set({
-          bookings: sql`${services.bookings} + 1`,
+          bookingCount: sql`${services.bookingCount} + 1`,
           updatedAt: new Date()
         })
         .where(eq(services.id, serviceId));

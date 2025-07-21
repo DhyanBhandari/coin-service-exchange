@@ -45,13 +45,13 @@ export class AuthService {
       // Hash password
       const hashedPassword = await hashPassword(userData.password);
 
-      // Create user
+      // Create user - using passwordHash field
       const newUserData: NewUser = {
         name: userData.name,
         email: userData.email,
-        passwordHash: hashedPassword, // Use passwordHash instead of password
+        passwordHash: hashedPassword,
         role: userData.role || USER_ROLES.USER,
-        isActive: true, // Use isActive instead of status
+        isActive: true,
         walletBalance: '0',
         emailVerified: false
       };
@@ -115,14 +115,14 @@ export class AuthService {
         throw createError('Invalid credentials', 401);
       }
 
-      // Check password
+      // Check password - use passwordHash field
       const isPasswordValid = await comparePassword(password, user.passwordHash || '');
       if (!isPasswordValid) {
         throw createError('Invalid credentials', 401);
       }
 
-      // Check user status
-      if (!user.isActive) { // Use isActive instead of status
+      // Check user status - use isActive field
+      if (!user.isActive) {
         throw createError('Account is suspended', 403);
       }
 
@@ -219,7 +219,7 @@ export class AuthService {
         throw createError('User not found', 404);
       }
 
-      // Verify current password
+      // Verify current password - use passwordHash field
       const isCurrentPasswordValid = await comparePassword(currentPassword, user.passwordHash || '');
       if (!isCurrentPasswordValid) {
         throw createError('Current password is incorrect', 400);
@@ -228,11 +228,11 @@ export class AuthService {
       // Hash new password
       const hashedNewPassword = await hashPassword(newPassword);
 
-      // Update password
+      // Update password - use passwordHash field
       await db
         .update(users)
         .set({
-          passwordHash: hashedNewPassword, // Use passwordHash instead of password
+          passwordHash: hashedNewPassword,
           updatedAt: new Date()
         })
         .where(eq(users.id, userId));
@@ -321,13 +321,14 @@ export class AuthService {
         return { message: 'If an account with that email exists, a password reset link has been sent.' };
       }
 
-      // Check user status
-      if (!user.isActive) { // Use isActive instead of status
+      // Check user status - use isActive field
+      if (!user.isActive) {
         throw createError('Account is suspended', 403);
       }
 
       // Generate reset token
       const resetToken = generatePasswordResetToken();
+      const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
 
       // Invalidate any existing tokens for this user
@@ -339,11 +340,11 @@ export class AuthService {
           eq(passwordResetTokens.isUsed, false)
         ));
 
-      // Create new reset token
+      // Create new reset token - include tokenHash
       const newTokenData: NewPasswordResetToken = {
         userId: user.id,
         token: resetToken,
-        tokenHash: crypto.createHash('sha256').update(resetToken).digest('hex'),
+        tokenHash: tokenHash,
         expiresAt,
         isUsed: false
       };
@@ -404,19 +405,19 @@ export class AuthService {
         throw createError('User not found', 404);
       }
 
-      // Check user status
-      if (!user.isActive) { // Use isActive instead of status
+      // Check user status - use isActive field
+      if (!user.isActive) {
         throw createError('Account is suspended', 403);
       }
 
       // Hash new password
       const hashedNewPassword = await hashPassword(newPassword);
 
-      // Update password
+      // Update password - use passwordHash field
       await db
         .update(users)
         .set({
-          passwordHash: hashedNewPassword, // Use passwordHash instead of password
+          passwordHash: hashedNewPassword,
           updatedAt: new Date()
         })
         .where(eq(users.id, user.id));

@@ -2,12 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { createApiResponse } from '@/utils/helpers';
 
-// Extended Request interface for file uploads
-interface RequestWithFile extends Request {
-  file?: Express.Multer.File;
-  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
-}
-
 export const validateBody = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const { error, value } = schema.validate(req.body, {
@@ -84,8 +78,8 @@ export const validateFile = (options: {
   maxSize?: number;
   allowedTypes?: string[];
 }) => {
-  return (req: RequestWithFile, res: Response, next: NextFunction): void => {
-    const file = req.file;
+  return (req: any, res: Response, next: NextFunction): void => {
+    const file = req.file; // Using any to avoid type error
 
     if (options.required && !file) {
       res.status(400).json(
