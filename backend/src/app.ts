@@ -1,4 +1,4 @@
-// backend/src/app.ts - Modified for Vercel Deployment
+// backend/src/app.ts - Fixed for Vercel Deployment
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,9 +14,12 @@ import { testRazorpayConnection } from './config/razorpay';
 
 import { logger } from './utils/logger';
 
-
 // Initialize database connection
-initializeDatabase();
+try {
+    initializeDatabase();
+} catch (error) {
+    logger.error('Database initialization failed:', error);
+}
 
 // Import middleware
 import { errorHandler, notFound } from './middleware/error.middleware';
@@ -80,7 +83,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Trust proxy for accurate IP addresses in production environments
 app.set('trust proxy', 1);
 
-
 // Root route handler
 app.get('/', (_req, res) => {
     res.json(
@@ -101,7 +103,6 @@ app.get('/health', async (_req, res) => {
         const [dbStatus, razorpayStatus] = await Promise.allSettled([
             testConnection(),
             testRazorpayConnection(),
-          
         ]);
 
         const healthStatus = {
@@ -119,11 +120,10 @@ app.get('/health', async (_req, res) => {
                     connected: razorpayStatus.status === 'fulfilled' && razorpayStatus.value,
                     status: razorpayStatus.status === 'fulfilled' && razorpayStatus.value ? 'Connected' : 'Connection Failed'
                 },
-               
             }
         };
 
-        if (healthStatus.dependencies.database.connected && healthStatus.dependencies.razorpay.connected ) {
+        if (healthStatus.dependencies.database.connected && healthStatus.dependencies.razorpay.connected) {
             logger.info('Health check passed. All services connected.');
         } else {
             logger.warn('Health check completed with connection issues.', healthStatus.dependencies);
@@ -133,10 +133,9 @@ app.get('/health', async (_req, res) => {
 
     } catch (error) {
         logger.error('Health check failed with an unexpected error:', error);
-        res.status(503).json(createApiResponse(false, null, 'Service Unavailable'));
+        res.status(503).json(createApiResponse(false, 'Service Unavailable'));
     }
 });
-
 
 // API documentation endpoint
 app.get('/api', (_req, res) => {
@@ -171,6 +170,13 @@ app.use(notFound);
 // Global error handler
 app.use(errorHandler);
 
-// Vercel requires the app to be exported as a default module.
-// The app.listen() block has been removed as Vercel handles the server lifecycle.
+// For Vercel, we need to export the app as a serverless function
 export default app;
+
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+        logger.info(`Server running on port ${PORT}`);
+    });
+}
