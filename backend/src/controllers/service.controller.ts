@@ -24,16 +24,16 @@ export class ServiceController {
     );
 
     res.status(201).json(
-      createApiResponse(true, 'Service created successfully', newService)
+      createApiResponse(true, newService, 'Service created successfully')
     );
   });
 
   getServices = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
-    
+
     // Create filters object with proper type handling
     const filters: any = {};
-    
+
     if (req.query.category) filters.category = req.query.category as string;
     if (req.query.search) filters.search = req.query.search as string;
     if (req.query.minPrice) filters.minPrice = parseFloat(req.query.minPrice as string);
@@ -41,10 +41,18 @@ export class ServiceController {
     if (req.query.status) filters.status = req.query.status as string;
     if (req.query.organizationId) filters.organizationId = req.query.organizationId as string;
 
-    const result = await this.serviceService.getServices(filters, pagination);
+    const result = await this.serviceService.getServices(
+      filters,
+      {
+        page: pagination.page,
+        limit: pagination.limit,
+        sortBy: req.query.sortBy as string,
+        sortOrder: req.query.sortOrder as 'asc' | 'desc'
+      }
+    );
 
     res.json(
-      createApiResponse(true, 'Services retrieved successfully', result.data, undefined, result.pagination)
+      createApiResponse(true, result.data, 'Services retrieved successfully', result.pagination)
     );
   });
 
@@ -53,7 +61,7 @@ export class ServiceController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Service ID is required')
+        createApiResponse(false, null, 'Service ID is required')
       );
       return;
     }
@@ -61,13 +69,13 @@ export class ServiceController {
     const service = await this.serviceService.getServiceById(id);
     if (!service) {
       res.status(404).json(
-        createApiResponse(false, 'Service not found')
+        createApiResponse(false, null, 'Service not found')
       );
       return;
     }
 
     res.json(
-      createApiResponse(true, 'Service retrieved successfully', service)
+      createApiResponse(true, service, 'Service retrieved successfully')
     );
   });
 
@@ -79,7 +87,7 @@ export class ServiceController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Service ID is required')
+        createApiResponse(false, null, 'Service ID is required')
       );
       return;
     }
@@ -93,7 +101,7 @@ export class ServiceController {
     );
 
     res.json(
-      createApiResponse(true, 'Service updated successfully', updatedService)
+      createApiResponse(true, updatedService, 'Service updated successfully')
     );
   });
 
@@ -104,7 +112,7 @@ export class ServiceController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Service ID is required')
+        createApiResponse(false, null, 'Service ID is required')
       );
       return;
     }
@@ -112,7 +120,7 @@ export class ServiceController {
     await this.serviceService.deleteService(id, req.user!.id, ipAddress, userAgent);
 
     res.json(
-      createApiResponse(true, 'Service deleted successfully')
+      createApiResponse(true, null, 'Service deleted successfully')
     );
   });
 
@@ -122,7 +130,7 @@ export class ServiceController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Service ID is required')
+        createApiResponse(false, null, 'Service ID is required')
       );
       return;
     }
@@ -130,7 +138,7 @@ export class ServiceController {
     const newReview = await this.serviceService.addReview(id, req.user!.id, rating, review);
 
     res.status(201).json(
-      createApiResponse(true, 'Review added successfully', newReview)
+      createApiResponse(true, newReview, 'Review added successfully')
     );
   });
 
@@ -139,7 +147,7 @@ export class ServiceController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Service ID is required')
+        createApiResponse(false, null, 'Service ID is required')
       );
       return;
     }
@@ -148,18 +156,18 @@ export class ServiceController {
     const service = await this.serviceService.getServiceById(id);
     if (!service) {
       res.status(404).json(
-        createApiResponse(false, 'Service not found')
+        createApiResponse(false, null, 'Service not found')
       );
       return;
     }
 
     // Check if user has sufficient balance
     const servicePrice = parseFloat(service.price);
-    const userBalance = parseFloat(req.user!.walletBalance);
+    const userBalance = parseFloat(req.user!.walletBalance || '0');
 
     if (userBalance < servicePrice) {
       res.status(400).json(
-        createApiResponse(false, 'Insufficient wallet balance')
+        createApiResponse(false, null, 'Insufficient wallet balance')
       );
       return;
     }
@@ -168,11 +176,11 @@ export class ServiceController {
     await this.serviceService.incrementBookings(id);
 
     res.json(
-      createApiResponse(true, 'Service booked successfully', {
+      createApiResponse(true, {
         serviceId: id,
         price: servicePrice,
         status: 'booked'
-      })
+      }, 'Service booked successfully')
     );
   });
 }

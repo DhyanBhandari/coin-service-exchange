@@ -1,4 +1,3 @@
-
 import { pgTable, text, integer, timestamp, boolean, json, decimal, uuid, index, uniqueIndex, serial, varchar, jsonb, foreignKey, interval } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -149,11 +148,37 @@ export const serviceBookings = pgTable('service_bookings', {
   cancelledByFk: foreignKey({ columns: [table.cancelledBy], foreignColumns: [users.id], name: 'service_bookings_cancelled_by_fk' }),
 }));
 
+// Transactions table (simplified version for backward compatibility)
+export const transactions = pgTable('transactions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').notNull(),
+  serviceId: uuid('service_id'),
+  type: varchar('type', { length: 50 }).notNull(),
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: varchar('currency', { length: 3 }).default('INR'),
+  status: varchar('status', { length: 20 }).default('pending'),
+  description: text('description'),
+  paymentMethod: varchar('payment_method', { length: 50 }),
+  paymentId: text('payment_id'),
+  balanceBefore: decimal('balance_before', { precision: 12, scale: 2 }),
+  balanceAfter: decimal('balance_after', { precision: 12, scale: 2 }),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  userIdx: index('transactions_user_idx').on(table.userId),
+  serviceIdx: index('transactions_service_idx').on(table.serviceId),
+  typeIdx: index('transactions_type_idx').on(table.type),
+  statusIdx: index('transactions_status_idx').on(table.status),
+  createdAtIdx: index('transactions_created_at_idx').on(table.createdAt),
+  userFk: foreignKey({ columns: [table.userId], foreignColumns: [users.id], name: 'transactions_user_fk' }),
+  serviceFk: foreignKey({ columns: [table.serviceId], foreignColumns: [services.id], name: 'transactions_service_fk' }),
+}));
 
 // Conversion requests table
 export const conversionRequests = pgTable('conversion_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: uuid('organization_id').notNull(), // <<<<<<<<<<<< FIXED HERE
+  organizationId: uuid('organization_id').notNull(),
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
   currency: text('currency').default('INR'),
   exchangeRate: decimal('exchange_rate', { precision: 10, scale: 4 }),
@@ -552,6 +577,7 @@ export const systemSettings = pgTable('system_settings', {
 export const usersRelations = relations(users, ({ many }) => ({
   services: many(services),
   serviceBookings: many(serviceBookings),
+  transactions: many(transactions),
   conversionRequests: many(conversionRequests),
   paymentMethods: many(paymentMethods),
   paymentTransactions: many(paymentTransactions),
@@ -581,6 +607,18 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
   bookings: many(serviceBookings),
   reviews: many(serviceReviews),
   favorites: many(userFavorites),
+  transactions: many(transactions),
+}));
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  user: one(users, {
+    fields: [transactions.userId],
+    references: [users.id]
+  }),
+  service: one(services, {
+    fields: [transactions.serviceId],
+    references: [services.id]
+  }),
 }));
 
 export const serviceBookingsRelations = relations(serviceBookings, ({ one, many }) => ({
@@ -600,7 +638,6 @@ export const serviceBookingsRelations = relations(serviceBookings, ({ one, many 
   reviews: many(serviceReviews),
   promotionalCodeUsage: many(promotionalCodeUsage),
 }));
-
 
 export const conversionRequestsRelations = relations(conversionRequests, ({ one }) => ({
   organization: one(users, {
@@ -741,6 +778,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Service = typeof services.$inferSelect;
 export type NewService = typeof services.$inferInsert;
+export type Transaction = typeof transactions.$inferSelect;
+export type NewTransaction = typeof transactions.$inferInsert;
 export type ServiceBooking = typeof serviceBookings.$inferSelect;
 export type NewServiceBooking = typeof serviceBookings.$inferInsert;
 export type ConversionRequest = typeof conversionRequests.$inferSelect;

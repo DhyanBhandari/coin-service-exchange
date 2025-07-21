@@ -1,4 +1,4 @@
-// backend/src/controllers/payment.controller.ts - Updated with better error handling
+// backend/src/controllers/payment.controller.ts - Complete Fixed Version
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../types';
 import { PaymentService } from '../services/payment.service';
@@ -84,8 +84,7 @@ export class PaymentController {
         {
           razorpay_order_id,
           razorpay_payment_id,
-          razorpay_signature,
-          userLocation
+          razorpay_signature
         },
         req.user.id.toString()
       );
@@ -97,20 +96,20 @@ export class PaymentController {
       );
     } catch (error: any) {
       logger.error('Payment verification error:', error);
-      
+
       // Handle specific error cases
       if (error.message.includes('Invalid payment signature')) {
         return res.status(400).json(
           createApiResponse(false, null, 'Payment verification failed. Invalid signature.')
         );
       }
-      
+
       if (error.message.includes('not found')) {
         return res.status(404).json(
           createApiResponse(false, null, 'Payment transaction not found.')
         );
       }
-      
+
       if (error.message.includes('Unauthorized')) {
         return res.status(403).json(
           createApiResponse(false, null, 'Unauthorized to verify this payment.')
@@ -132,8 +131,14 @@ export class PaymentController {
         return res.status(400).json({ status: 'error', message: 'Missing signature' });
       }
 
-      await this.paymentService.handleWebhook(payload, signature);
-      
+      // Check if handleWebhook method exists
+      if (typeof this.paymentService.handleWebhook === 'function') {
+        await this.paymentService.handleWebhook(payload, signature);
+      } else {
+        logger.warn('handleWebhook method not implemented in PaymentService');
+        return res.status(501).json({ status: 'error', message: 'Webhook handling not implemented' });
+      }
+
       logger.info('Webhook processed successfully');
       res.json({ status: 'ok' });
     } catch (error: any) {
@@ -258,7 +263,7 @@ export class PaymentController {
       );
     } catch (error: any) {
       logger.error('Delete payment method error:', error);
-      
+
       if (error.message.includes('not found')) {
         return res.status(404).json(
           createApiResponse(false, null, 'Payment method not found')

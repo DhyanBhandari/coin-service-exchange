@@ -21,7 +21,7 @@ export class ConversionController {
     );
 
     res.status(201).json(
-      createApiResponse(true, 'Conversion request created successfully', request)
+      createApiResponse(true, request, 'Conversion request created successfully')
     );
   });
 
@@ -29,10 +29,16 @@ export class ConversionController {
     const pagination = validatePaginationParams(req.query.page as string, req.query.limit as string);
     const organizationId = req.user!.role === 'org' ? req.user!.id : undefined;
 
-    const result = await this.conversionService.getConversionRequests(pagination, organizationId);
+    const result = await this.conversionService.getConversionRequests(
+      {
+        page: pagination.page,
+        limit: pagination.limit
+      },
+      organizationId
+    );
 
     res.json(
-      createApiResponse(true, 'Conversion requests retrieved successfully', result.data, undefined, result.pagination)
+      createApiResponse(true, result.data, 'Conversion requests retrieved successfully', result.pagination)
     );
   });
 
@@ -41,7 +47,7 @@ export class ConversionController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Request ID is required')
+        createApiResponse(false, null, 'Request ID is required')
       );
       return;
     }
@@ -49,13 +55,13 @@ export class ConversionController {
     const request = await this.conversionService.getConversionRequestById(id);
     if (!request) {
       res.status(404).json(
-        createApiResponse(false, 'Conversion request not found')
+        createApiResponse(false, null, 'Conversion request not found')
       );
       return;
     }
 
     res.json(
-      createApiResponse(true, 'Conversion request retrieved successfully', request)
+      createApiResponse(true, request, 'Conversion request retrieved successfully')
     );
   });
 
@@ -65,7 +71,7 @@ export class ConversionController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Request ID is required')
+        createApiResponse(false, null, 'Request ID is required')
       );
       return;
     }
@@ -77,7 +83,7 @@ export class ConversionController {
     );
 
     res.json(
-      createApiResponse(true, 'Conversion request approved successfully', request)
+      createApiResponse(true, request, 'Conversion request approved successfully')
     );
   });
 
@@ -87,7 +93,7 @@ export class ConversionController {
 
     if (!id) {
       res.status(400).json(
-        createApiResponse(false, 'Request ID is required')
+        createApiResponse(false, null, 'Request ID is required')
       );
       return;
     }
@@ -99,7 +105,7 @@ export class ConversionController {
     );
 
     res.json(
-      createApiResponse(true, 'Conversion request rejected successfully', request)
+      createApiResponse(true, request, 'Conversion request rejected successfully')
     );
   });
 }

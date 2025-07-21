@@ -46,14 +46,57 @@ export const sanitizeUser = (user: any) => {
 };
 
 // API response helper
-export const createApiResponse = (success: boolean, data: any = null, message: string = '') => {
-  return {
+// Fixed createApiResponse function with proper overloads
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message: string;
+  timestamp: string;
+  pagination?: any;
+}
+
+// Overloaded function signatures to handle different parameter orders
+export function createApiResponse(success: boolean, data: any, message?: string): ApiResponse;
+export function createApiResponse(success: boolean, data: any, message: string, pagination?: any): ApiResponse;
+export function createApiResponse(success: boolean, message: string): ApiResponse;
+export function createApiResponse(success: boolean, dataOrMessage: any, messageOrPagination?: any, pagination?: any): ApiResponse {
+  // Handle different parameter combinations
+  let data: any = null;
+  let message: string = '';
+  let paginationInfo: any = undefined;
+
+  if (typeof dataOrMessage === 'string') {
+    // createApiResponse(success, message)
+    message = dataOrMessage;
+    data = null;
+  } else {
+    // createApiResponse(success, data, message?, pagination?)
+    data = dataOrMessage;
+
+    if (typeof messageOrPagination === 'string') {
+      message = messageOrPagination;
+      paginationInfo = pagination;
+    } else {
+      // If messageOrPagination is not a string, it might be pagination
+      message = '';
+      paginationInfo = messageOrPagination;
+    }
+  }
+
+  const response: ApiResponse = {
     success,
     data,
     message,
     timestamp: new Date().toISOString()
   };
-};
+
+  if (paginationInfo) {
+    response.pagination = paginationInfo;
+  }
+
+  return response;
+}
 
 // Pagination helpers
 export const validatePaginationParams = (page?: string, limit?: string) => {

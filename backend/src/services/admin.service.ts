@@ -1,31 +1,13 @@
 // Fixed admin.service.ts
 import { getDb } from '../config/database';
-import { users, services, conversionRequests } from '../models/schema';
+import { users, services, conversionRequests, serviceCategories } from '../models/schema';
 import { eq, count, desc, gte, sql } from 'drizzle-orm';
 import { DashboardStats, UserStats, ServiceStats, FinancialStats } from '../types';
 import { USER_ROLES, SERVICE_STATUS } from '../utils/constants';
 import { logger } from '../utils/logger';
 
 export class AdminService {
-  static createServiceCategory(name: any, description: any) {
-    throw new Error('Method not implemented.');
-  }
-  static suspendUser(id: string) {
-    throw new Error('Method not implemented.');
-  }
-  static approveService(id: string) {
-    throw new Error('Method not implemented.');
-  }
-  static getSystemHealth() {
-    throw new Error('Method not implemented.');
-  }
-  static getManagementData() {
-    throw new Error('Method not implemented.');
-  }
-  static getDashboardStats() {
-    throw new Error('Method not implemented.');
-  }
-  async getDashboardStats(): Promise<DashboardStats> {
+  static async getDashboardStats(): Promise<DashboardStats> {
     try {
       const db = getDb();
       const thirtyDaysAgo = new Date();
@@ -88,7 +70,6 @@ export class AdminService {
         0
       );
 
-
       const totalRevenue = 0;
       const thisMonthRevenue = 0;
 
@@ -115,22 +96,21 @@ export class AdminService {
     }
   }
 
-  async getRecentActivity(limit: number = 10) {
+  static async getManagementData() {
     try {
       const db = getDb();
-
 
       const recentServices = await db
         .select()
         .from(services)
         .orderBy(desc(services.createdAt))
-        .limit(limit);
+        .limit(10);
 
       const recentUsers = await db
         .select()
         .from(users)
         .orderBy(desc(users.createdAt))
-        .limit(limit);
+        .limit(10);
 
       return {
         services: recentServices,
@@ -140,12 +120,12 @@ export class AdminService {
         })
       };
     } catch (error) {
-      logger.error('Get recent activity error:', error);
+      logger.error('Get management data error:', error);
       throw error;
     }
   }
 
-  async getSystemHealth() {
+  static async getSystemHealth() {
     try {
       const db = getDb();
 
@@ -178,6 +158,79 @@ export class AdminService {
       };
     } catch (error) {
       logger.error('Get system health error:', error);
+      throw error;
+    }
+  }
+
+  static async approveService(id: string) {
+    try {
+      const db = getDb();
+
+      const [updatedService] = await db
+        .update(services)
+        .set({
+          status: SERVICE_STATUS.ACTIVE,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(services.id, id))
+        .returning();
+
+      if (!updatedService) {
+        throw new Error('Service not found');
+      }
+
+      logger.info(`Service approved: ${id}`);
+      return updatedService;
+    } catch (error) {
+      logger.error('Approve service error:', error);
+      throw error;
+    }
+  }
+
+  static async suspendUser(id: string) {
+    try {
+      const db = getDb();
+
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          isActive: false,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, id))
+        .returning();
+
+      if (!updatedUser) {
+        throw new Error('User not found');
+      }
+
+      logger.info(`User suspended: ${id}`);
+      return updatedUser;
+    } catch (error) {
+      logger.error('Suspend user error:', error);
+      throw error;
+    }
+  }
+
+  static async createServiceCategory(name: string, description: string) {
+    try {
+      const db = getDb();
+
+      const [newCategory] = await db
+        .insert(serviceCategories)
+        .values({
+          name,
+          description,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          isActive: true
+        })
+        .returning();
+
+      logger.info(`Service category created: ${name}`);
+      return newCategory;
+    } catch (error) {
+      logger.error('Create service category error:', error);
       throw error;
     }
   }

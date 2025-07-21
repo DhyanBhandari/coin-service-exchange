@@ -13,7 +13,7 @@ export class UserController {
 
   getProfile = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
     res.json(
-      createApiResponse(true, 'Profile retrieved successfully', req.user)
+      createApiResponse(true, req.user, 'Profile retrieved successfully')
     );
   });
 
@@ -30,7 +30,7 @@ export class UserController {
     );
 
     res.json(
-      createApiResponse(true, 'Profile updated successfully', updatedUser)
+      createApiResponse(true, updatedUser, 'Profile updated successfully')
     );
   });
 
@@ -39,28 +39,28 @@ export class UserController {
 
     if (!id) {
       return res.status(400).json(
-        createApiResponse(false, 'User ID is required')
+        createApiResponse(false, null, 'User ID is required')
       );
     }
 
     const user = await this.userService.getUserById(id);
     if (!user) {
       return res.status(404).json(
-        createApiResponse(false, 'User not found')
+        createApiResponse(false, null, 'User not found')
       );
     }
 
     return res.json(
-      createApiResponse(true, 'User retrieved successfully', user)
+      createApiResponse(true, user, 'User retrieved successfully')
     );
   });
 
   getWalletBalance = asyncHandler(async (req: AuthRequest, res: Response, next: NextFunction) => {
     res.json(
-      createApiResponse(true, 'Wallet balance retrieved successfully', {
+      createApiResponse(true, {
         balance: req.user!.walletBalance,
         currency: 'INR'
-      })
+      }, 'Wallet balance retrieved successfully')
     );
   });
 }

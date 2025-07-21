@@ -17,6 +17,8 @@ import * as schema from '../models/schema';
 // A type alias for the Drizzle transaction object for cleaner code.
 type Tx = PgTransaction<any, typeof schema, any>;
 
+
+
 export class PaymentService {
   private userService: UserService;
   private auditService: AuditService;
@@ -114,17 +116,17 @@ export class PaymentService {
       logger.warn(`Invalid payment signature for order: ${razorpay_order_id}`);
       throw createError('Invalid payment signature.', 400);
     }
-    
+
     const db = getDb();
-    
+
     const [existingPayment] = await db
-        .select({ status: paymentTransactions.status })
-        .from(paymentTransactions)
-        .where(eq(paymentTransactions.razorpayOrderId, razorpay_order_id));
+      .select({ status: paymentTransactions.status })
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.razorpayOrderId, razorpay_order_id));
 
     if (existingPayment?.status === PAYMENT_STATUS.COMPLETED) {
-        logger.warn(`Attempted to re-verify an already completed payment: ${razorpay_order_id}`);
-        return { success: true, message: 'This payment has already been verified.' };
+      logger.warn(`Attempted to re-verify an already completed payment: ${razorpay_order_id}`);
+      return { success: true, message: 'This payment has already been verified.' };
     }
 
     try {
@@ -138,12 +140,12 @@ export class PaymentService {
 
         if (!paymentRecord) throw new Error('Payment record not found.');
         if (paymentRecord.userId !== userId) throw new Error('Payment does not belong to this user.');
-            
+
         const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
         const amountToAdd = parseFloat(paymentRecord.amount!);
 
         const { balanceBefore, balanceAfter } = await this.userService.updateWalletBalance(userId, amountToAdd, 'add', tx);
-        
+
 
         await tx
           .update(paymentTransactions)
@@ -161,20 +163,20 @@ export class PaymentService {
 
       logger.info(`Payment verified and coins credited for order: ${razorpay_order_id}`);
       return {
-          success: true,
-          message: 'Payment verified and coins added successfully.',
+        success: true,
+        message: 'Payment verified and coins added successfully.',
       };
 
     } catch (error: any) {
       logger.error({
-          message: `Payment verification failed during database transaction. The transaction has been rolled back.`,
-          orderId: razorpay_order_id,
-          error: error.message,
+        message: `Payment verification failed during database transaction. The transaction has been rolled back.`,
+        orderId: razorpay_order_id,
+        error: error.message,
       });
       throw createError('An error occurred while verifying your payment. Please contact support.', 500);
     }
   }
-  
+
   private verifyRazorpaySignature(orderId: string, paymentId: string, signature: string): boolean {
     try {
       const body = `${orderId}|${paymentId}`;
@@ -201,61 +203,102 @@ export class PaymentService {
     if (!paymentId) {
       throw createError('Missing paymentId for refund.', 400);
     }
-    
+
     const db = getDb();
     logger.info({ message: 'Starting refund process', paymentId, amount, adminId });
 
     try {
-        return await db.transaction(async (tx) => {
-            const [paymentTransaction] = await tx
-                .select()
-                .from(paymentTransactions)
-                .where(eq(paymentTransactions.razorpayPaymentId, paymentId))
-                .for('update')
-                .limit(1);
+      return await db.transaction(async (tx) => {
+        const [paymentTransaction] = await tx
+          .select()
+          .from(paymentTransactions)
+          .where(eq(paymentTransactions.razorpayPaymentId, paymentId))
+          .for('update')
+          .limit(1);
 
-            if (!paymentTransaction) throw new Error('Payment transaction not found.');
-            if (paymentTransaction.status !== 'completed') throw new Error('Only completed transactions can be refunded.');
+        if (!paymentTransaction) throw new Error('Payment transaction not found.');
+        if (paymentTransaction.status !== 'completed') throw new Error('Only completed transactions can be refunded.');
 
-            const refundAmount = amount || parseFloat(paymentTransaction.amount!);
-            if (refundAmount <= 0 || refundAmount > parseFloat(paymentTransaction.amount!)) {
-                throw new Error('Invalid refund amount.');
-            }
+        const refundAmount = amount || parseFloat(paymentTransaction.amount!);
+        if (refundAmount <= 0 || refundAmount > parseFloat(paymentTransaction.amount!)) {
+          throw new Error('Invalid refund amount.');
+        }
 
-            const refund = await razorpay.payments.refund(paymentId, {
-                amount: refundAmount * 100,
-                notes: { reason: reason || 'Refund processed', processedBy: adminId || 'system' },
-            });
-
-            const { balanceBefore, balanceAfter } = await this.userService.updateWalletBalance(paymentTransaction.userId!, refundAmount, 'subtract', tx);
-
-            
-            const [updatedTransaction] = await tx
-                .update(paymentTransactions)
-                .set({
-                    refundId: refund.id,
-                    refundAmount: refundAmount.toString(),
-                    refundStatus: 'processed',
-                    refundReason: reason,
-                    refundedAt: new Date(),
-                })
-                .where(eq(paymentTransactions.id, paymentTransaction.id))
-                .returning();
-            
-            // ✅ CORRECTED: Pass the transaction object `tx` to the audit service.
-            await this.auditService.log({
-                userId: adminId || paymentTransaction.userId!,
-                action: 'refund_processed',
-                resource: 'payment',
-                resourceId: paymentTransaction.id.toString(),
-            }, tx);
-
-            logger.info({ message: `Refund processed successfully`, refundId: refund.id, paymentId });
-            return updatedTransaction;
+        const refund = await razorpay.payments.refund(paymentId, {
+          amount: refundAmount * 100,
+          notes: { reason: reason || 'Refund processed', processedBy: adminId || 'system' },
         });
+
+        const { balanceBefore, balanceAfter } = await this.userService.updateWalletBalance(paymentTransaction.userId!, refundAmount, 'subtract', tx);
+
+
+        const [updatedTransaction] = await tx
+          .update(paymentTransactions)
+          .set({
+            refundId: refund.id,
+            refundAmount: refundAmount.toString(),
+            refundStatus: 'processed',
+            refundReason: reason,
+            refundedAt: new Date(),
+          })
+          .where(eq(paymentTransactions.id, paymentTransaction.id))
+          .returning();
+
+        // ✅ CORRECTED: Pass the transaction object `tx` to the audit service.
+        await this.auditService.log({
+          userId: adminId || paymentTransaction.userId!,
+          action: 'refund_processed',
+          resource: 'payment',
+          resourceId: paymentTransaction.id.toString(),
+        }, tx);
+
+        logger.info({ message: `Refund processed successfully`, refundId: refund.id, paymentId });
+        return updatedTransaction;
+      });
     } catch (error: any) {
-        logger.error({ message: `Refund processing failed`, paymentId, error: error.message });
-        throw createError(error.message || 'Failed to process refund.', 500);
+      logger.error({ message: `Refund processing failed`, paymentId, error: error.message });
+      throw createError(error.message || 'Failed to process refund.', 500);
+    }
+  }
+
+  /**
+   * Handles webhook events from Razorpay
+   * @param payload The webhook payload
+   * @param signature The webhook signature for verification
+   */
+  async handleWebhook(payload: any, signature: string): Promise<void> {
+    if (!payload || !signature) {
+      throw createError('Missing webhook payload or signature', 400);
+    }
+
+    try {
+      // Verify the webhook signature
+      const isValid = this.verifyWebhookSignature(payload, signature);
+      if (!isValid) {
+        logger.warn('Invalid webhook signature received');
+        throw createError('Invalid webhook signature', 400);
+      }
+
+      // Process the webhook based on event type
+      const event = payload.event;
+      logger.info(`Processing webhook event: ${event}`);
+
+      switch (event) {
+        case 'payment.authorized':
+          await this.handlePaymentAuthorized(payload.payload.payment.entity);
+          break;
+        case 'payment.failed':
+          await this.handlePaymentFailed(payload.payload.payment.entity);
+          break;
+        case 'refund.processed':
+          await this.handleRefundProcessed(payload.payload.refund.entity);
+          break;
+        default:
+          logger.info(`Unhandled webhook event type: ${event}`);
+      }
+    } catch (error: any) {
+      logger.error('Webhook processing error:', error);
+      throw createError(error.message || 'Failed to process webhook', 500);
     }
   }
 
@@ -340,7 +383,7 @@ export class PaymentService {
       throw createError(error.message || 'Failed to delete payment method', 500);
     }
   }
-  
+
   async getPaymentStats(userId?: string): Promise<any> {
     try {
       const db = getDb();
@@ -360,7 +403,7 @@ export class PaymentService {
         averageAmount:
           transactions.length > 0
             ? transactions.reduce((sum, t) => sum + parseFloat(t.amount!), 0) /
-              transactions.length
+            transactions.length
             : 0,
         paymentMethods: this.groupByPaymentMethod(transactions),
         regions: this.groupByRegion(transactions),
@@ -404,5 +447,123 @@ export class PaymentService {
       acc[region] = (acc[region] || 0) + 1;
       return acc;
     }, {});
+  }
+
+  /**
+   * Verifies the webhook signature from Razorpay
+   */
+  private verifyWebhookSignature(payload: any, signature: string): boolean {
+    try {
+      const body = JSON.stringify(payload);
+      const expectedSignature = crypto
+        .createHmac('sha256', razorpayConfig.webhookSecret)
+        .update(body)
+        .digest('hex');
+
+      return crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, 'hex'),
+        Buffer.from(signature, 'hex')
+      );
+    } catch (error) {
+      logger.error('Error verifying webhook signature:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handles payment.authorized webhook event
+   */
+  private async handlePaymentAuthorized(payment: any): Promise<void> {
+    const db = getDb();
+    const paymentId = payment.id;
+    const orderId = payment.order_id;
+
+    try {
+      const [transaction] = await db
+        .select()
+        .from(paymentTransactions)
+        .where(eq(paymentTransactions.razorpayOrderId, orderId));
+
+      if (!transaction) {
+        logger.warn(`No transaction found for order ID: ${orderId}`);
+        return;
+      }
+
+      // If payment is already completed, don't process again
+      if (transaction.status === PAYMENT_STATUS.COMPLETED) {
+        logger.info(`Payment already marked as completed for order: ${orderId}`);
+        return;
+      }
+
+      // Update transaction status
+      await db
+        .update(paymentTransactions)
+        .set({
+          razorpayPaymentId: paymentId,
+          status: PAYMENT_STATUS.COMPLETED,
+          gatewayResponse: payment,
+          capturedAt: new Date(),
+        })
+        .where(eq(paymentTransactions.razorpayOrderId, orderId));
+
+      // Credit user's wallet
+      const amountToAdd = parseFloat(transaction.amount!);
+      await this.userService.updateWalletBalance(transaction.userId!, amountToAdd, 'add');
+
+      logger.info(`Payment completed via webhook for order: ${orderId}`);
+    } catch (error) {
+      logger.error(`Failed to process payment.authorized webhook for payment: ${paymentId}`, error);
+    }
+  }
+
+  /**
+   * Handles payment.failed webhook event
+   */
+  private async handlePaymentFailed(payment: any): Promise<void> {
+    const db = getDb();
+    const paymentId = payment.id;
+    const orderId = payment.order_id;
+
+    try {
+      await db
+        .update(paymentTransactions)
+        .set({
+          razorpayPaymentId: paymentId,
+          status: 'failed',
+          gatewayResponse: payment,
+          failureReason: payment.error_description || 'Payment failed',
+          updatedAt: new Date(), // Use updatedAt instead of failedAt
+        })
+        .where(eq(paymentTransactions.razorpayOrderId, orderId));
+
+      logger.info(`Payment marked as failed via webhook for order: ${orderId}`);
+    } catch (error) {
+      logger.error(`Failed to process payment.failed webhook for payment: ${paymentId}`, error);
+    }
+  }
+
+  /**
+   * Handles refund.processed webhook event
+   */
+  private async handleRefundProcessed(refund: any): Promise<void> {
+    const db = getDb();
+    const refundId = refund.id;
+    const paymentId = refund.payment_id;
+
+    try {
+      await db
+        .update(paymentTransactions)
+        .set({
+          refundId: refundId,
+          refundAmount: (refund.amount / 100).toString(),
+          refundStatus: 'completed',
+          refundedAt: new Date(),
+        })
+        .where(eq(paymentTransactions.razorpayPaymentId, paymentId));
+
+      logger.info(`Refund marked as completed via webhook for payment: ${paymentId}`);
+    } catch (error) {
+      logger.error(`Failed to process refund.processed webhook for refund: ${refundId}`, error);
+    }
   }
 }
