@@ -1,0 +1,25 @@
+# Ignore source files - only deploy built files
+src/
+api/
+scripts/
+migrations/
+logs/
+
+# Ignore development files
+.env
+.env.local
+*.log
+*.test.ts
+*.spec.ts
+
+# Ignore configuration files not needed for deployment
+tsconfig.json
+jest.config.js
+.eslintrc.json
+drizzle.config.ts
+
+# Keep only dist folder and necessary configs
+!dist/
+!package.json
+!package-lock.json
+!vercel.json
