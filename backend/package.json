@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
-    "start": "node dist/app.js",
+    "start": "node -r ./register-paths.js dist/src/app.js",
     "vercel-build": "npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -54,6 +54,7 @@
     "pg": "^8.11.3",
     "postgres": "^3.4.7",
     "razorpay": "^2.9.6",
+    "tsconfig-paths": "^4.2.0",
     "winston": "^3.12.0"
   },
   "devDependencies": {
