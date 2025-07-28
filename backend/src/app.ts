@@ -139,25 +139,38 @@ app.get('/api', (_req, res) => {
 try {
     // Only load routes if essential dependencies are available
     if (process.env.DATABASE_URL) {
-        // Import routes asynchronously to avoid crashes during startup
-        Promise.all([
-            import('./routes/auth.routes'),
-            import('./routes/user.routes'),
-            import('./routes/service.routes'),
-            import('./routes/payment.routes'),
-            import('./routes/conversion.routes'),
-            import('./routes/admin.routes')
-        ]).then(([authRoutes, userRoutes, serviceRoutes, paymentRoutes, conversionRoutes, adminRoutes]) => {
-            app.use('/api/v1/auth', authRoutes.default);
-            app.use('/api/v1/users', userRoutes.default);
-            app.use('/api/v1/services', serviceRoutes.default);
-            app.use('/api/v1/payments', paymentRoutes.default);
-            app.use('/api/v1/conversions', conversionRoutes.default);
-            app.use('/api/v1/admin', adminRoutes.default);
+        // First, initialize the database
+        import('./config/database').then(({ initializeDatabase, testConnection }) => {
+            console.log('Initializing database...');
+            initializeDatabase();
+            
+            // Test the connection
+            testConnection().then(connected => {
+                console.log('Database connection test result:', connected);
+                
+                // Import routes asynchronously to avoid crashes during startup
+                Promise.all([
+                    import('./routes/auth.routes'),
+                    import('./routes/user.routes'),
+                    import('./routes/service.routes'),
+                    import('./routes/payment.routes'),
+                    import('./routes/conversion.routes'),
+                    import('./routes/admin.routes')
+                ]).then(([authRoutes, userRoutes, serviceRoutes, paymentRoutes, conversionRoutes, adminRoutes]) => {
+                    app.use('/api/v1/auth', authRoutes.default);
+                    app.use('/api/v1/users', userRoutes.default);
+                    app.use('/api/v1/services', serviceRoutes.default);
+                    app.use('/api/v1/payments', paymentRoutes.default);
+                    app.use('/api/v1/conversions', conversionRoutes.default);
+                    app.use('/api/v1/admin', adminRoutes.default);
 
-            console.log('Routes loaded successfully');
-        }).catch((error) => {
-            console.error('Failed to load routes:', error);
+                    console.log('Routes loaded successfully');
+                }).catch((error) => {
+                    console.error('Failed to load routes:', error);
+                });
+            });
+        }).catch(error => {
+            console.error('Failed to initialize database:', error);
         });
     } else {
         console.warn('DATABASE_URL not configured - routes not loaded');

@@ -27,11 +27,14 @@ export function initializeDatabase() {
         }
 
         if (!client) { // Prevent re-initializing if already done
+            // For Supabase pooler connection, we need specific SSL settings
+            const isSupabase = connectionString.includes('supabase.com');
+            
             client = postgres(connectionString, {
                 max: 3, // Reduced for serverless
                 idle_timeout: 10,
                 connect_timeout: 10,
-                ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+                ssl: isSupabase || process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
                 prepare: false, // Important for serverless
             });
 
@@ -93,11 +96,18 @@ export const testConnection = async () => {
         }
 
         // Create a separate client just for testing with a very short timeout
-        const testClient = postgres(process.env.DATABASE_URL, {
+        const dbUrl = process.env.DATABASE_URL;
+        const isSupabase = dbUrl.includes('supabase.com');
+        
+        console.log(`Testing database connection to ${isSupabase ? 'Supabase' : 'PostgreSQL'}...`);
+        console.log(`Connection string length: ${dbUrl.length}`);
+        console.log(`SSL enabled: ${isSupabase || process.env.NODE_ENV === 'production'}`);
+        
+        const testClient = postgres(dbUrl, {
             max: 1,
             idle_timeout: 5,
             connect_timeout: 5,
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            ssl: isSupabase || process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
             prepare: false,
         });
 
@@ -115,6 +125,7 @@ export const testConnection = async () => {
         return true;
     } catch (error: any) {
         console.error(`Database connection failed: ${error.message}`);
+        console.error('Full error:', error);
         return false;
     }
 };
