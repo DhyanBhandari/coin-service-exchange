@@ -93,16 +93,27 @@ app.get('/test-db', async (_req, res) => {
     try {
         // Only test if DATABASE_URL exists
         if (!process.env.DATABASE_URL) {
-            return res.json(createSimpleResponse(false, null, 'DATABASE_URL not configured'));
+            return res.json(createSimpleResponse(false, {
+                hasDbUrl: false,
+                envVars: Object.keys(process.env).filter(k => !k.startsWith('npm_') && k !== 'DATABASE_URL').sort()
+            }, 'DATABASE_URL not configured'));
         }
 
         // Try to import and test database
         const { testConnection } = await import('./config/database');
         const dbStatus = await testConnection();
 
-        res.json(createSimpleResponse(true, { connected: dbStatus }, 'Database test completed'));
+        res.json(createSimpleResponse(true, { 
+            connected: dbStatus,
+            hasDbUrl: true,
+            dbUrlLength: process.env.DATABASE_URL.length,
+            nodeEnv: process.env.NODE_ENV
+        }, 'Database test completed'));
     } catch (error: any) {
-        res.json(createSimpleResponse(false, { error: error.message }, 'Database test failed'));
+        res.json(createSimpleResponse(false, { 
+            error: error.message,
+            hasDbUrl: !!process.env.DATABASE_URL
+        }, 'Database test failed'));
     }
 });
 
