@@ -1,5 +1,6 @@
-// Simple start script for Railway without path aliases
+// Simple start script for Railway with path aliases
 require('dotenv').config();
+require('./register-paths');
 
 // Debug environment variables
 console.log('=== Environment Variables Debug ===');
