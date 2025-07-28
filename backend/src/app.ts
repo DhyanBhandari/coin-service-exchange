@@ -22,7 +22,8 @@ const allowedOrigins = [
     'http://localhost:8080',
     'https://erthaexchange.netlify.app',
     'https://coin-service-exchange.vercel.app',
-    'https://coin-service-exchange-backend.vercel.app'
+    'https://coin-service-exchange-backend.vercel.app',
+    'https://coin-service-exchange.onrender.com'
 ];
 
 app.use(cors({
