@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backend Test</title>
+</head>
+<body>
+    <h1>Backend Connection Test</h1>
+    <button onclick="testBackend()">Test Backend</button>
+    <div id="results"></div>
+
+    <script>
+        async function testBackend() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = 'Testing...';
+
+            const urls = [
+                'https://coin-service-exchange-backend-production.up.railway.app',
+                'https://coin-service-exchange-backend-production.up.railway.app/health',
+                'https://coin-service-exchange-backend-production.up.railway.app/api',
+                'https://coin-service-exchange-backend-production.up.railway.app/api/v1/auth/profile'
+            ];
+
+            for (const url of urls) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    resultsDiv.innerHTML += `<br>${url}: ${response.status} - ${response.statusText}`;
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        resultsDiv.innerHTML += `<br>Response: ${JSON.stringify(data)}`;
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML += `<br>${url}: ERROR - ${error.message}`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
