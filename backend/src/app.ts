@@ -99,6 +99,11 @@ app.get('/test-db', async (_req, res) => {
             }, 'DATABASE_URL not configured'));
         }
 
+        // Parse the connection string to check format
+        const dbUrl = process.env.DATABASE_URL;
+        const isValidFormat = dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://');
+        const hasPooler = dbUrl.includes('pooler.supabase.com');
+        
         // Try to import and test database
         const { testConnection } = await import('./config/database');
         const dbStatus = await testConnection();
@@ -106,14 +111,29 @@ app.get('/test-db', async (_req, res) => {
         res.json(createSimpleResponse(true, { 
             connected: dbStatus,
             hasDbUrl: true,
-            dbUrlLength: process.env.DATABASE_URL.length,
-            nodeEnv: process.env.NODE_ENV
+            dbUrlLength: dbUrl.length,
+            isValidFormat,
+            hasPooler,
+            nodeEnv: process.env.NODE_ENV,
+            dbHost: dbUrl.match(/@([^:\/]+)/)?.[1] || 'unknown'
         }, 'Database test completed'));
     } catch (error: any) {
         res.json(createSimpleResponse(false, { 
             error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
             hasDbUrl: !!process.env.DATABASE_URL
         }, 'Database test failed'));
+    }
+});
+
+// Simple database test endpoint using pg directly
+app.get('/test-db-simple', async (_req, res) => {
+    try {
+        const { simpleDbTest } = await import('./test-db-simple');
+        const result = await simpleDbTest();
+        res.json(createSimpleResponse(result.success, result, 'Simple database test'));
+    } catch (error: any) {
+        res.json(createSimpleResponse(false, { error: error.message }, 'Simple database test failed'));
     }
 });
 
@@ -125,6 +145,7 @@ app.get('/api', (_req, res) => {
             endpoints: {
                 health: '/health',
                 'test-db': '/test-db',
+                'test-db-simple': '/test-db-simple',
                 auth: '/api/v1/auth',
                 users: '/api/v1/users',
                 services: '/api/v1/services'
@@ -137,46 +158,47 @@ app.get('/api', (_req, res) => {
 
 // Initialize routes safely
 try {
-    // Only load routes if essential dependencies are available
+    // First, initialize the database if DATABASE_URL exists
     if (process.env.DATABASE_URL) {
-        // First, initialize the database
         import('./config/database').then(({ initializeDatabase, testConnection }) => {
             console.log('Initializing database...');
             initializeDatabase();
             
-            // Test the connection
+            // Test the connection but don't block route loading
             testConnection().then(connected => {
                 console.log('Database connection test result:', connected);
-                
-                // Import routes asynchronously to avoid crashes during startup
-                Promise.all([
-                    import('./routes/auth.routes'),
-                    import('./routes/user.routes'),
-                    import('./routes/service.routes'),
-                    import('./routes/payment.routes'),
-                    import('./routes/conversion.routes'),
-                    import('./routes/admin.routes')
-                ]).then(([authRoutes, userRoutes, serviceRoutes, paymentRoutes, conversionRoutes, adminRoutes]) => {
-                    app.use('/api/v1/auth', authRoutes.default);
-                    app.use('/api/v1/users', userRoutes.default);
-                    app.use('/api/v1/services', serviceRoutes.default);
-                    app.use('/api/v1/payments', paymentRoutes.default);
-                    app.use('/api/v1/conversions', conversionRoutes.default);
-                    app.use('/api/v1/admin', adminRoutes.default);
-
-                    console.log('Routes loaded successfully');
-                }).catch((error) => {
-                    console.error('Failed to load routes:', error);
-                });
+            }).catch(err => {
+                console.error('Database test failed:', err);
             });
         }).catch(error => {
             console.error('Failed to initialize database:', error);
         });
-    } else {
-        console.warn('DATABASE_URL not configured - routes not loaded');
     }
+    
+    // Load routes regardless of database status
+    console.log('Loading routes...');
+    Promise.all([
+        import('./routes/auth.routes'),
+        import('./routes/user.routes'),
+        import('./routes/service.routes'),
+        import('./routes/payment.routes'),
+        import('./routes/conversion.routes'),
+        import('./routes/admin.routes')
+    ]).then(([authRoutes, userRoutes, serviceRoutes, paymentRoutes, conversionRoutes, adminRoutes]) => {
+        app.use('/api/v1/auth', authRoutes.default);
+        app.use('/api/v1/users', userRoutes.default);
+        app.use('/api/v1/services', serviceRoutes.default);
+        app.use('/api/v1/payments', paymentRoutes.default);
+        app.use('/api/v1/conversions', conversionRoutes.default);
+        app.use('/api/v1/admin', adminRoutes.default);
+
+        console.log('Routes loaded successfully');
+    }).catch((error) => {
+        console.error('Failed to load routes:', error);
+        console.error('Route loading error details:', error.stack);
+    });
 } catch (error) {
-    console.error('Error during route initialization:', error);
+    console.error('Error during initialization:', error);
 }
 
 // 404 handler
