@@ -7,12 +7,23 @@ export async function simpleDbTest() {
         return { success: false, error: 'DATABASE_URL not set' };
     }
     
-    const client = new Client({
+    // For Supabase, we need specific SSL configuration
+    const isSupabase = DATABASE_URL.includes('supabase.com');
+    
+    const clientConfig: any = {
         connectionString: DATABASE_URL,
-        ssl: {
-            rejectUnauthorized: false
-        }
-    });
+    };
+    
+    // Supabase pooler requires SSL mode 'require'
+    if (isSupabase) {
+        clientConfig.ssl = { rejectUnauthorized: false };
+        // For pooler connections, we might need to specify the ssl mode differently
+        clientConfig.ssl = 'require';
+    } else {
+        clientConfig.ssl = { rejectUnauthorized: false };
+    }
+    
+    const client = new Client(clientConfig);
     
     try {
         console.log('Attempting to connect to database...');

@@ -137,6 +137,17 @@ app.get('/test-db-simple', async (_req, res) => {
     }
 });
 
+// Supabase-specific test endpoint
+app.get('/test-supabase', async (_req, res) => {
+    try {
+        const { testSupabaseConnection } = await import('./config/supabase-db');
+        const result = await testSupabaseConnection();
+        res.json(createSimpleResponse(result.success, result, 'Supabase connection test'));
+    } catch (error: any) {
+        res.json(createSimpleResponse(false, { error: error.message }, 'Supabase test failed'));
+    }
+});
+
 // API info endpoint
 app.get('/api', (_req, res) => {
     try {

@@ -30,13 +30,22 @@ export function initializeDatabase() {
             // For Supabase pooler connection, we need specific SSL settings
             const isSupabase = connectionString.includes('supabase.com');
             
-            client = postgres(connectionString, {
+            // For Supabase pooler, we need to ensure proper SSL mode
+            const connectionOptions: any = {
                 max: 3, // Reduced for serverless
                 idle_timeout: 10,
                 connect_timeout: 10,
-                ssl: isSupabase || process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
                 prepare: false, // Important for serverless
-            });
+            };
+            
+            // Supabase pooler requires SSL
+            if (isSupabase) {
+                connectionOptions.ssl = 'require';
+            } else if (process.env.NODE_ENV === 'production') {
+                connectionOptions.ssl = { rejectUnauthorized: false };
+            }
+            
+            client = postgres(connectionString, connectionOptions);
 
             db = drizzle(client, {
                 schema,
@@ -101,15 +110,23 @@ export const testConnection = async () => {
         
         console.log(`Testing database connection to ${isSupabase ? 'Supabase' : 'PostgreSQL'}...`);
         console.log(`Connection string length: ${dbUrl.length}`);
-        console.log(`SSL enabled: ${isSupabase || process.env.NODE_ENV === 'production'}`);
+        console.log(`SSL mode: ${isSupabase ? 'require' : 'false'}`);
         
-        const testClient = postgres(dbUrl, {
+        const testOptions: any = {
             max: 1,
             idle_timeout: 5,
             connect_timeout: 5,
-            ssl: isSupabase || process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
             prepare: false,
-        });
+        };
+        
+        // Use proper SSL mode for Supabase
+        if (isSupabase) {
+            testOptions.ssl = 'require';
+        } else if (process.env.NODE_ENV === 'production') {
+            testOptions.ssl = { rejectUnauthorized: false };
+        }
+        
+        const testClient = postgres(dbUrl, testOptions);
 
         // Execute a simple query with a timeout
         const timeoutPromise = new Promise((_, reject) =>
